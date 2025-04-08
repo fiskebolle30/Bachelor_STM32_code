@@ -61,7 +61,7 @@ static void MX_USART1_UART_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-uint8_t data;
+uint8_t data[20];
 /* USER CODE END 0 */
 
 /**
@@ -103,17 +103,27 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+  //char uart_send_data[10] = "          ";
+  char buffer[10] = "          ";
+  HAL_StatusTypeDef spi_status;
   while (1)
   {
-	  if( HAL_SPI_Receive(&hspi2, &data, 1, 1000) != HAL_OK ) {
+	 /* while (hspi2.State != HAL_SPI_STATE_READY)
+	  {
+		  sprintf(buffer, "not ready %d", hspi2.State);
+		  HAL_UART_Transmit(&huart1, buffer, 11, 100);
+		  HAL_Delay(10);
+	  }*/
+	  spi_status = HAL_SPI_Receive(&hspi2, &data, 20, 100);
+	  if( spi_status != HAL_OK ) {
 		  HAL_GPIO_TogglePin(USER_LED1_GPIO_Port, USER_LED1_Pin);
 		  char error_message[20] = "\r\nbalabanis";
-		  HAL_UART_Transmit(&huart1, &error_message, 11, 1000);
+		  sprintf(error_message, "%d", spi_status);
+		  HAL_UART_Transmit(&huart1, &error_message, 11, 100);
 	  }
 	  else {
-		  char uart_send_data[10] = "          ";
-		  sprintf(uart_send_data, "%#X ", data);
-		  HAL_UART_Transmit(&huart1, &uart_send_data, 7, 1000);
+		  //sprintf(uart_send_data, "%#X ", data);
+		  HAL_UART_Transmit(&huart1, &data, 20, 100); //(&huart1, &uart_send_data, 7, 1000);
 	  }
 
     /* USER CODE END WHILE */
@@ -267,7 +277,7 @@ static void MX_USART1_UART_Init(void)
 
   /* USER CODE END USART1_Init 1 */
   huart1.Instance = USART1;
-  huart1.Init.BaudRate = 115200;
+  huart1.Init.BaudRate = 921600;
   huart1.Init.WordLength = UART_WORDLENGTH_8B;
   huart1.Init.StopBits = UART_STOPBITS_1;
   huart1.Init.Parity = UART_PARITY_NONE;
