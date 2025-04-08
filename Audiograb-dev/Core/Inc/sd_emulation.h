@@ -10,8 +10,6 @@
 
 #include "spi.h"
 
-uint8_t SPI2_initial_data;
-
 void SD_emulation_init();
 
 
