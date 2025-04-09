@@ -5,6 +5,7 @@
  *      Author: steinar
  */
 #include "sd_emulation.h"
+#include "gpio.h"
 
 #define SD_START_BITS_MASK 0b11000000 //start bit + transmission bit
 #define SD_VALID_START_PATTERN 0b01000000 //start bit 0, transmision bit 1
@@ -25,8 +26,9 @@ enum SD_emulator_state state;
 
 //Private function prototypes:
 void SPI_TX_RX_complete_callback(SPI_HandleTypeDef *hspi);
-void command_handler(uint8_t num, uint32_t arg, uint8_t crc);
+void SD_command_handler(uint8_t num, uint32_t arg, uint8_t crc);
 void set_bytes_to_ff(uint8_t *buf, const unsigned int len);
+
 
 //Function declarations:
 void SD_emulation_init()
@@ -67,22 +69,26 @@ void SPI_TX_RX_complete_callback(SPI_HandleTypeDef *hspi)
 		command_arg |= (SPI2_rx_buffer[1] << 16);
 		command_arg |= (SPI2_rx_buffer[0] << 24); //MSBs of argument
 		command_CRC = SPI2_rx_buffer[4];
-		command_handler(command_num, command_arg, command_CRC);
+		SD_command_handler(command_num, command_arg, command_CRC);
 		//Do I place SPI_transfer here or in command_handler?
 		return;
 	}
 }
 
-void command_handler(uint8_t num, uint32_t arg, uint8_t crc)
+void SD_command_handler(uint8_t num, uint32_t arg, uint8_t crc)
 {
 	switch(num)
 	{
 	case 0: {
-		state = awaiting_cmd;
+		state = awaiting_cmd; //switch back to "idle" state before sending response
+		HAL_GPIO_TogglePin(USER_LED1_GPIO_Port, USER_LED1_Pin); //debug to see if this actually happens
+		//SD_send_response(1);
 		break;
 	}
 	default: {
 		state = error;
+		HAL_GPIO_TogglePin(USER_LED2_GPIO_Port, USER_LED2_Pin);
+
 		//send r1 response with error?
 		break;
 	}
