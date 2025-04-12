@@ -1,4 +1,4 @@
-*Debug/
+**/Debug
 #This gitignore is based on the Eclipse gitignore, which is
 #published under github's gitignore repository, which is under the CC0-1.0 license.
 .metadata
