@@ -8,6 +8,7 @@
 #ifndef INC_SD_EMULATION_H_
 #define INC_SD_EMULATION_H_
 
+#include "gpio.h"
 #include "spi.h"
 
 void SD_emulation_init();
