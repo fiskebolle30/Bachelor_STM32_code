@@ -144,10 +144,6 @@ void MX_SPI2_Init(void)
   LL_SPI_DisableNSSPulseMgt(SPI2);
   /* USER CODE BEGIN SPI2_Init 2 */
 
-	LL_SPI_SetUDRPattern(SPI2, 0xFFFFFFFF); //Send only ones on underrun, as this means the "SD card" is processing/busy.
-	LL_SPI_SetUDRConfiguration(SPI2, LL_SPI_UDR_CONFIG_REGISTER_PATTERN);
-	LL_SPI_SetUDRDetection(SPI2, LL_SPI_UDR_DETECT_BEGIN_ACTIVE_NSS);
-
   /* USER CODE END SPI2_Init 2 */
 
 }

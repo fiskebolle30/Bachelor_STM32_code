@@ -29,6 +29,7 @@ extern "C" {
 /* Includes ------------------------------------------------------------------*/
 #include "stm32h7xx_hal.h"
 
+#include "stm32h7xx_ll_dma.h"
 #include "stm32h7xx_ll_rcc.h"
 #include "stm32h7xx_ll_spi.h"
 #include "stm32h7xx_ll_bus.h"
@@ -37,7 +38,6 @@ extern "C" {
 #include "stm32h7xx_ll_utils.h"
 #include "stm32h7xx_ll_pwr.h"
 #include "stm32h7xx_ll_gpio.h"
-#include "stm32h7xx_ll_dma.h"
 
 #include "stm32h7xx_ll_exti.h"
 
