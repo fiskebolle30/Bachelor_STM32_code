@@ -12,6 +12,10 @@
 #define SPI_TX_DMA_INSTANCE DMA1
 #define SPI_TX_DMA_STREAM_NUM 1
 
+//Masks used to clear all interrupt flags for a DMA stream, while leaving reserved bits.
+#define DMA_STREAM0_INTERRUPTFLAGS_MASK (uint32_t)0b01111101
+#define DMA_STREAM1_INTERRUPTFLAGS_MASK (uint32_t)(0b01111101 << 8)
+
 #define SD_START_BITS_MASK 0b11000000 //start bit + transmission bit
 #define SD_VALID_START_PATTERN 0b01000000 //start bit 0, transmision bit 1
 #define SD_ACMD_BITMASK 0b10000000
@@ -44,30 +48,33 @@ void SD_emulation_init()
 	LL_SPI_SetUDRDetection(SD_EMUL_SPI, LL_SPI_UDR_DETECT_END_DATA_FRAME); //register underrun immediately when the TX FIFO is empty.
 	LL_SPI_EnableIOLock(SD_EMUL_SPI); //The SPI IO settings shouldn't change ever anyways (I think lol).
 
-	//Enable SPI.
+	//Configure DMA interrupts. The implementation is driven by the RX DMA interrupt.
+	LL_DMA_EnableIT_TC(SPI_RX_DMA_INSTANCE, SPI_RX_DMA_STREAM_NUM);
 
 	//Start reception of SPI. This is continual, and all of the "action" happens in the DMA callbacks.
 	state = awaiting_cmd;
 	transmission_length = 1;
 	SD_emulator_tx_buffer[0] = 0xff;
 
-	//Start DMA transfer in accordance to the "cookbook recipe" at ref. manual section 55.4.14
+	//Start DMA transfer in accordance to the "cookbook recipe" at ref. manual section 55.4.14.
 	LL_SPI_EnableDMAReq_RX(SD_EMUL_SPI);
 
-	//Ensure DMA streams are disabled to make changes
+	//Ensure DMA streams are disabled to make changes to them.
 	LL_DMA_DisableStream(SPI_RX_DMA_INSTANCE, SPI_RX_DMA_STREAM_NUM);
 	LL_DMA_DisableStream(SPI_TX_DMA_INSTANCE, SPI_TX_DMA_STREAM_NUM);
 	while (LL_DMA_IsEnabledStream(SPI_RX_DMA_INSTANCE, SPI_RX_DMA_STREAM_NUM)) {;} //wait until stream is disabled
 	while (LL_DMA_IsEnabledStream(SPI_TX_DMA_INSTANCE, SPI_TX_DMA_STREAM_NUM)) {;}
-	SPI_RX_DMA_INSTANCE->LIFCR = (0b01111101 | (0b01111101 << 8)); //Clear all interrupt flags for channel 0 and 1. Can't be bothered to write 14 separate macros, sorry.
+	SPI_RX_DMA_INSTANCE->LIFCR = DMA_STREAM0_INTERRUPTFLAGS_MASK | DMA_STREAM1_INTERRUPTFLAGS_MASK; //Clear all interrupt flags for channel 0 and 1.
 
-	//Set adresses to transfer from and to
+	//Set addresses to transfer data from and to.
 	LL_DMA_SetPeriphAddress(SPI_RX_DMA_INSTANCE, SPI_RX_DMA_STREAM_NUM, SD_EMUL_SPI);
 	LL_DMA_SetPeriphAddress(SPI_TX_DMA_INSTANCE, SPI_TX_DMA_STREAM_NUM, SD_EMUL_SPI);
 	LL_DMA_SetMemoryAddress(SPI_RX_DMA_INSTANCE, SPI_RX_DMA_STREAM_NUM, SD_emulator_rx_buffer);
 	LL_DMA_SetMemoryAddress(SPI_TX_DMA_INSTANCE, SPI_TX_DMA_STREAM_NUM, SD_emulator_tx_buffer);
 
-	HAL_SPI_TransmitReceive_IT(&hspi2, SD_emulator_tx_buffer, SPI2_rx_buffer, transmission_length); //replace me
+	LL_DMA_SetDataLength(SPI_TX_DMA_INSTANCE, SPI_TX_DMA_STREAM_NUM, transmission_length);
+	LL_DMA_SetDataLength(SPI_RX_DMA_INSTANCE, SPI_RX_DMA_STREAM_NUM, transmission_length);
+
 }
 
 
