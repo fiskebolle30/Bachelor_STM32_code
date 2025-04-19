@@ -179,8 +179,6 @@ void Error_Handler(void);
 #define OCSPI1_IO3_GPIO_Port GPIOF
 #define OCSPI1_IO2_Pin GPIO_PIN_7
 #define OCSPI1_IO2_GPIO_Port GPIOF
-#define SPI2_MISO_Pin GPIO_PIN_2
-#define SPI2_MISO_GPIO_Port GPIOC
 #define LCD_G4_Pin GPIO_PIN_11
 #define LCD_G4_GPIO_Port GPIOJ
 #define LCD_G5_Pin GPIO_PIN_0
@@ -227,8 +225,10 @@ void Error_Handler(void);
 #define D10_GPIO_Port GPIOE
 #define SDNE1_Pin GPIO_PIN_6
 #define SDNE1_GPIO_Port GPIOH
-#define SPI2_MOSI_Pin GPIO_PIN_3
-#define SPI2_MOSI_GPIO_Port GPIOC
+#define SPI2_MISO_Pin GPIO_PIN_14
+#define SPI2_MISO_GPIO_Port GPIOB
+#define SPI2_MOSI_Pin GPIO_PIN_15
+#define SPI2_MOSI_GPIO_Port GPIOB
 #define OCSPI1_IO5_Pin GPIO_PIN_3
 #define OCSPI1_IO5_GPIO_Port GPIOH
 #define OCSPI1_DQS_Pin GPIO_PIN_5

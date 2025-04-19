@@ -20,7 +20,6 @@
 #include "main.h"
 #include "dma.h"
 #include "memorymap.h"
-#include "usb_device.h"
 #include "gpio.h"
 
 /* Private includes ----------------------------------------------------------*/
@@ -90,7 +89,6 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_DMA_Init();
-  MX_USB_DEVICE_Init();
   /* USER CODE BEGIN 2 */
   HAL_GPIO_WritePin(USER_LED1_GPIO_Port, USER_LED1_Pin, GPIO_PIN_SET);
   HAL_Delay(500);
