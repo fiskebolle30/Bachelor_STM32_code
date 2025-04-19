@@ -12,6 +12,7 @@ volatile uint8_t SD_emulator_tx_buffer[10];
 unsigned int transmission_length;
 
 volatile uint8_t num_packets_in_tx_fifo = 0;
+volatile bool cmd_is_ACMD; //Replace this with static int in interrupt function? Would probably increase performance.
 
 uint8_t command_num; //bit #7 being set (0b10xxxxxx) indicates ACMD
 uint32_t command_arg;
@@ -35,16 +36,18 @@ void SD_emulation_init()
 
 	//Configure DMA interrupts. The implementation is driven by the RX DMA interrupt.
 	LL_DMA_EnableIT_TC(SPI_RX_DMA_INSTANCE, SPI_RX_DMA_STREAM_NUM);
-	LL_SPI_SetFIFOThreshold(SD_EMUL_SPI, 4);
+
 	//Setup interrupt-based command reception:
+	LL_SPI_SetFIFOThreshold(SD_EMUL_SPI, LL_SPI_FIFO_TH_01DATA); //Handle one byte at a time while waiting for command.
 	LL_SPI_SetTransferSize(SD_EMUL_SPI, 0); //Transfer length unknown.
 	LL_SPI_EnableIT_RXP(SD_EMUL_SPI); //Enable "packet received" interrupt
+	LL_SPI_EnableIT_UDR(SD_EMUL_SPI); //Enable TX FIFO underrun interrupt
 
 	//Start reception of SPI. This is continual, and all of the "action" happens in the SPI interrupt callbacks.
 	state = awaiting_cmd;
 	LL_SPI_Enable(SD_EMUL_SPI);
 	LL_SPI_TransmitData16(SD_EMUL_SPI, 0xFFFF); //Send 2 FF bytes to TX FIFO.
-	num_packets_in_tx_fifo = 2;
+	num_packets_in_tx_fifo = 2; //This variable might be obsolete, as this seems like something that is kept track of through program design instead.
 }
 
 void transfer_SPI_DMA(uint8_t *txbuf, uint8_t *rxbuf, unsigned int trans_len) //Kind of unfinished, something something surprise tool that will help us later

@@ -10,6 +10,7 @@
 
 #include "gpio.h"
 #include "spi.h"
+#include <stdbool.h>
 
 
 //Defines
@@ -27,6 +28,9 @@
 #define SD_VALID_START_PATTERN 0b01000000 //start bit 0, transmision bit 1
 #define SD_ACMD_BITMASK 0b10000000
 
+#define CMD(cmd_num) (cmd_num) //can't be bothered to write all of them lol
+#define ACMD(cmd_num) (cmd_num & SD_ACMD_BITMASK)
+
 
 //Global variables.
 extern volatile uint8_t SD_emulator_rx_buffer[10];
@@ -34,6 +38,7 @@ extern volatile uint8_t SD_emulator_tx_buffer[10];
 extern unsigned int transmission_length;
 
 extern volatile uint8_t num_packets_in_tx_fifo;
+extern volatile bool cmd_is_ACMD; //Bool to indicate if the current command is an application-specific command (CMD55 before it)
 
 extern uint8_t command_num; //bit #7 being set (0b10xxxxxx) indicates ACMD
 extern uint32_t command_arg;
