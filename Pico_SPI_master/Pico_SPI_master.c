@@ -26,7 +26,7 @@ int main()
     }
 
     // SPI initialisation. This example will use SPI at 1MHz.
-    spi_init(SPI_PORT, 1000*1000);
+    spi_init(SPI_PORT, 1000*10000);
     gpio_set_function(PIN_MISO, GPIO_FUNC_SPI);
     gpio_set_function(PIN_CS,   GPIO_FUNC_SIO);
     gpio_set_function(PIN_SCK,  GPIO_FUNC_SPI);
@@ -43,6 +43,8 @@ int main()
     while (true) {
         char received = getc(stdin); //Wait for character from PC
         printf("Hello, world! %c received.\n", received);
+        gpio_put(PIN_CS, 0); //activate CS
         spi_write_blocking(SPI_PORT, &received, 1);
+        gpio_put(PIN_CS, 1); //deactivate CS
     }
 }
