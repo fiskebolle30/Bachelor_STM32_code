@@ -22,6 +22,7 @@
 #include "stm32h7xx_it.h"
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "sd_emulation.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -231,6 +232,21 @@ void DMA1_Stream1_IRQHandler(void)
 void SPI2_IRQHandler(void)
 {
   /* USER CODE BEGIN SPI2_IRQn 0 */
+	switch(state) {
+	case awaiting_cmd: {
+		HAL_GPIO_TogglePin(USER_LED2_GPIO_Port, USER_LED2_Pin);
+		LL_SPI_TransmitData8(SPI2, 0xFF); //Replenish TX FIFO, keeping it at the same level.
+		uint8_t received_data = LL_SPI_ReceiveData8(SPI2);
+		if((received_data & SD_START_BITS_MASK) == SD_VALID_START_PATTERN)
+		{
+			state = waiting_for_cmd_arg;
+		}
+		break;
+		}
+	default: {
+
+	}
+	}
 
   /* USER CODE END SPI2_IRQn 0 */
   /* USER CODE BEGIN SPI2_IRQn 1 */

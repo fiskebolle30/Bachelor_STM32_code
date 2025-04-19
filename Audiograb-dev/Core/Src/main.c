@@ -103,9 +103,6 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-/*	uint8_t data = 0xff;
-	HAL_SPI_TransmitR(&hspi2, &data, 1, 1000);
-	*/
 
     /* USER CODE END WHILE */
 
@@ -154,7 +151,7 @@ void SystemClock_Config(void)
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
   RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_CSI;
   RCC_OscInitStruct.PLL.PLLM = 1;
-  RCC_OscInitStruct.PLL.PLLN = 36;
+  RCC_OscInitStruct.PLL.PLLN = 72;
   RCC_OscInitStruct.PLL.PLLP = 6;
   RCC_OscInitStruct.PLL.PLLQ = 16;
   RCC_OscInitStruct.PLL.PLLR = 4;
