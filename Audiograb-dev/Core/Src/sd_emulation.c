@@ -20,8 +20,8 @@
 #define SD_VALID_START_PATTERN 0b01000000 //start bit 0, transmision bit 1
 #define SD_ACMD_BITMASK 0b10000000
 
-uint8_t SD_emulator_rx_buffer[10];
-uint8_t SD_emulator_tx_buffer[10];
+volatile uint8_t SD_emulator_rx_buffer[10];
+volatile uint8_t SD_emulator_tx_buffer[10];
 unsigned int transmission_length;
 uint8_t command_num; //bit #7 being set (0b10xxxxxx) indicates ACMD
 uint32_t command_arg;
@@ -36,7 +36,7 @@ enum SD_emulator_state state;
 //Private function prototypes:
 void SPI_TX_RX_complete_callback(/*SPI_HandleTypeDef *hspi*/);
 void SD_command_handler(uint8_t num, uint32_t arg, uint8_t crc);
-void set_bytes_to_ff(uint8_t *buf, const unsigned int len);
+//void set_bytes_to_ff(uint8_t *buf, const unsigned int len);
 
 
 //Function declarations:
@@ -56,6 +56,10 @@ void SD_emulation_init()
 	transmission_length = 1;
 	SD_emulator_tx_buffer[0] = 0x11;
 
+}
+
+void transfer_SPI_DMA(uint8_t *txbuf, uint8_t *rxbuf, unsigned int trans_len) //Kind of unfinished, something something surprise tool that will help us later
+{
 	//Start DMA transfer in accordance to the "cookbook recipe" at ref. manual section 55.4.14.
 	LL_SPI_EnableDMAReq_RX(SD_EMUL_SPI);
 
@@ -69,17 +73,16 @@ void SD_emulation_init()
 	//Set addresses to transfer data from and to.
 	LL_DMA_SetPeriphAddress(SPI_RX_DMA_INSTANCE, SPI_RX_DMA_STREAM_NUM, (uint32_t)SD_EMUL_SPI); //Peripheral address should never change, so this line may be unnecessary.
 	LL_DMA_SetPeriphAddress(SPI_TX_DMA_INSTANCE, SPI_TX_DMA_STREAM_NUM, (uint32_t)SD_EMUL_SPI); //Cast pointers into uint32_t to write it to DMA register
-	LL_DMA_SetMemoryAddress(SPI_RX_DMA_INSTANCE, SPI_RX_DMA_STREAM_NUM, (uint32_t)SD_emulator_rx_buffer);
-	LL_DMA_SetMemoryAddress(SPI_TX_DMA_INSTANCE, SPI_TX_DMA_STREAM_NUM, (uint32_t)SD_emulator_tx_buffer);
+	LL_DMA_SetMemoryAddress(SPI_RX_DMA_INSTANCE, SPI_RX_DMA_STREAM_NUM, (uint32_t)rxbuf);
+	LL_DMA_SetMemoryAddress(SPI_TX_DMA_INSTANCE, SPI_TX_DMA_STREAM_NUM, (uint32_t)txbuf);
 
-	LL_DMA_SetDataLength(SPI_TX_DMA_INSTANCE, SPI_TX_DMA_STREAM_NUM, transmission_length);
-	LL_DMA_SetDataLength(SPI_RX_DMA_INSTANCE, SPI_RX_DMA_STREAM_NUM, transmission_length);
+	LL_DMA_SetDataLength(SPI_TX_DMA_INSTANCE, SPI_TX_DMA_STREAM_NUM, trans_len);
+	LL_DMA_SetDataLength(SPI_RX_DMA_INSTANCE, SPI_RX_DMA_STREAM_NUM, trans_len);
 
 	LL_DMA_EnableStream(SPI_RX_DMA_INSTANCE, SPI_RX_DMA_STREAM_NUM);
 	LL_DMA_EnableStream(SPI_TX_DMA_INSTANCE, SPI_TX_DMA_STREAM_NUM);
 
 	LL_SPI_Enable(SD_EMUL_SPI);
-
 }
 
 
@@ -96,7 +99,7 @@ void SPI_TX_RX_complete_callback(/*SPI_HandleTypeDef *hspi*/)
 
 			//Receive the rest of the command (5 more bytes).
 			transmission_length = 5;
-			set_bytes_to_ff(SD_emulator_tx_buffer, transmission_length);
+			//set_bytes_to_ff(SD_emulator_tx_buffer, transmission_length);
 			//HAL_SPI_TransmitReceive_DMA(hspi, SD_emulator_tx_buffer, SD_emulator_rx_buffer, transmission_length); //replace me
 			return;
 		}
@@ -135,7 +138,7 @@ void SD_command_handler(uint8_t num, uint32_t arg, uint8_t crc)
 	}
 }
 
-void set_bytes_to_ff(uint8_t *buf, const unsigned int len)
+/*void set_bytes_to_ff(uint8_t *buf, const unsigned int len)
 {
 	if(buf != NULL) {
 		for(uint8_t i = 0; i < len; ++i) //Set all bytes to be transmitted to 0xff
@@ -143,4 +146,4 @@ void set_bytes_to_ff(uint8_t *buf, const unsigned int len)
 			buf[i] = 0xff;
 		}
 	}
-}
+}*/
