@@ -243,9 +243,6 @@ void SPI2_IRQHandler(void)
 			{
 				MODIFY_REG(SD_EMUL_SPI->CFG1, SPI_CFG1_FTHLV, LL_SPI_FIFO_TH_05DATA); //Set FIFO threshold to 5, so that the interrupt won't fire again until the rest of the command is received.
 
-				LL_SPI_TransmitData32(SD_EMUL_SPI, 0xFFFFFFFF); //Transmit enough 0xFF for the rest of the command (4 bytes in addition to the one already queued).
-				SET_BIT(SD_EMUL_SPI->IFCR, SPI_IFCR_UDRC); //Clear UDR flag, in case it's been set.
-
 				state = waiting_for_cmd_arg;
 				uint8_t received_command_num; //Make new local variable to avoid performance penalty of volatile.
 				received_command_num = (received_data & ~SD_START_BITS_MASK) | (cmd_is_ACMD << 7); //Mask out start bits, and add ACMD indication if applicable.
@@ -269,7 +266,7 @@ void SPI2_IRQHandler(void)
 			}
 			else //If this isn't a start-of-command byte:
 			{
-				*((__IO uint8_t *)&SD_EMUL_SPI->TXDR) = 0xFF; //Send one 0xFF byte to TX FIFO, keeping it at the same level.
+				*((__IO uint8_t *)&SD_EMUL_SPI->TXDR) = 0xFF; //Send one 0xFF byte to TX FIFO, keeping it at the same level, ready for a command.
 			}
 			break;
 			}
