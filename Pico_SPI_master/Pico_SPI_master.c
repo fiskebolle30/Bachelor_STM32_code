@@ -26,7 +26,7 @@ int main()
     }
 
     // SPI initialisation. This example will use SPI at 1MHz.
-    spi_init(SPI_PORT, 1000*10000);
+    spi_init(SPI_PORT, 1000*12000);
     gpio_set_function(PIN_MISO, GPIO_FUNC_SPI);
     gpio_set_function(PIN_CS,   GPIO_FUNC_SIO);
     gpio_set_function(PIN_SCK,  GPIO_FUNC_SPI);
@@ -40,11 +40,14 @@ int main()
     // Example to turn on the Pico W LED
     cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 1);
 
+    char received[20] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+
     while (true) {
-        char received = getc(stdin); //Wait for character from PC
-        printf("Hello, world! %c received.\n", received);
+        received[0] = getc(stdin); //Wait for character from PC
+        printf("Hello, world! %c received.\n", received[0]);
         gpio_put(PIN_CS, 0); //activate CS
-        spi_write_blocking(SPI_PORT, &received, 1);
+        spi_write_blocking(SPI_PORT, received, 20);
+        //spi_write_blocking(SPI_PORT, &received, 1);
         gpio_put(PIN_CS, 1); //deactivate CS
     }
 }

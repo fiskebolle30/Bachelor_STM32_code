@@ -48,7 +48,7 @@ void SD_emulation_init()
 	LL_SPI_Enable(SD_EMUL_SPI);
 	LL_SPI_TransmitData32(SD_EMUL_SPI, 0xFFFFFFFF);
 	LL_SPI_TransmitData16(SD_EMUL_SPI, 0xFFFF); //Send 6 FF bytes to TX FIFO, which is the length of a SD SPI command.
-	num_packets_in_tx_fifo = 6; //This variable might be obsolete, as this seems like something that is kept track of through program design instead.
+	SET_BIT(SD_EMUL_SPI->IFCR, SPI_IFCR_UDRC); //Clear UDR flag in case it was set before the bytes could be transferred to the TX FIFO.
 }
 
 void transfer_SPI_DMA(uint8_t *txbuf, uint8_t *rxbuf, unsigned int trans_len) //Kind of unfinished, something something surprise tool that will help us later

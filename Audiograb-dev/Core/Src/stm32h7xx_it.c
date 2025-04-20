@@ -248,11 +248,14 @@ void SPI2_IRQHandler(void)
 				received_command_num = (received_data & ~SD_START_BITS_MASK) | (cmd_is_ACMD << 7); //Mask out start bits, and add ACMD indication if applicable.
 
 				switch(received_command_num) {
-				case CMD(0): {
+				case CMD(0): { //CMD0: go to idle state.
+					*((__IO uint8_t *)&SD_EMUL_SPI->TXDR) = 0x01; //Send dummy "I'm Ok" R1 response. Maybe change to actually transmit errors if applicable?
+					SET_BIT(SD_EMUL_SPI->IFCR, SPI_IFCR_UDRC); //Clear UDR flag in case it's been set.
 
+					//The command is completed in the waiting_for_cmd_arg case, where the state is set back to awaiting_cmd and FIFO threshold set to 1.
 					break;
 				}
-				case CMD(55): //The next command is an application-specific command (ACMD).
+				case CMD(55): //CMD55: The next command is an application-specific command (ACMD).
 				case ACMD(55): { //ACMD55 has the same function as CMD55.
 					cmd_is_ACMD = true;
 					break;
@@ -270,14 +273,34 @@ void SPI2_IRQHandler(void)
 			}
 			break;
 			}
+
 		case waiting_for_cmd_arg: {
-			uint32_t received_cmd_arg = LL_SPI_ReceiveData32(SD_EMUL_SPI);
-			uint8_t received_cmd_CRC = LL_SPI_ReceiveData8(SD_EMUL_SPI);
-			command_arg = received_cmd_arg;
-			command_CRC = received_cmd_CRC;
+			uint32_t received_cmd_arg = LL_SPI_ReceiveData32(SD_EMUL_SPI); //Retrieve command argument from RX FIFO
+			uint8_t received_cmd_CRC = LL_SPI_ReceiveData8(SD_EMUL_SPI); //Do the same with the last byte of the command
+
+			switch(command_num) {
+			case CMD(0): {
+				//The response has already been queued in the awaiting_cmd case.
+
+				//Get ready to receive another command:
+				MODIFY_REG(SD_EMUL_SPI->CFG1, SPI_CFG1_FTHLV, LL_SPI_FIFO_TH_01DATA); //Set FIFO threshold back to 1,
+				LL_SPI_TransmitData32(SD_EMUL_SPI, 0xFFFFFFFF);
+				LL_SPI_TransmitData16(SD_EMUL_SPI, 0xFFFF); //Set 6 new 0xFF bytes into the TX register
+				SET_BIT(SD_EMUL_SPI->IFCR, SPI_IFCR_UDRC); //Clear UDR flag in case it's been set.
+				state = awaiting_cmd; //State is once more awaiting_cmd
+				break;
+			}
+
+			default: {
+
+			}
+			}
+			command_arg = received_cmd_arg; //Write to global registers. Not sure if this is necessary,
+			command_CRC = received_cmd_CRC; //I think this data is only used in the interrupt.
+			break;
 		}
 		default: {
-
+			//Should probably throw an error if the state isn't any of the above handled ones.
 		}
 		} //end of switch(state)
 	/*}
