@@ -282,12 +282,6 @@ void SPI2_IRQHandler(void)
 			case CMD(0): {
 				//The response has already been queued in the awaiting_cmd case.
 
-				//Get ready to receive another command:
-				MODIFY_REG(SD_EMUL_SPI->CFG1, SPI_CFG1_FTHLV, LL_SPI_FIFO_TH_01DATA); //Set FIFO threshold back to 1,
-				LL_SPI_TransmitData32(SD_EMUL_SPI, 0xFFFFFFFF);
-				LL_SPI_TransmitData16(SD_EMUL_SPI, 0xFFFF); //Set 6 new 0xFF bytes into the TX register
-				SET_BIT(SD_EMUL_SPI->IFCR, SPI_IFCR_UDRC); //Clear UDR flag in case it's been set.
-				state = awaiting_cmd; //State is once more awaiting_cmd
 				break;
 			}
 
@@ -297,6 +291,13 @@ void SPI2_IRQHandler(void)
 			}
 			command_arg = received_cmd_arg; //Write to global registers. Not sure if this is necessary,
 			command_CRC = received_cmd_CRC; //I think this data is only used in the interrupt.
+
+			//Get ready to receive another command:
+			MODIFY_REG(SD_EMUL_SPI->CFG1, SPI_CFG1_FTHLV, LL_SPI_FIFO_TH_01DATA); //Set FIFO threshold back to 1,
+			LL_SPI_TransmitData32(SD_EMUL_SPI, 0xFFFFFFFF);
+			//LL_SPI_TransmitData16(SD_EMUL_SPI, 0xFFFF); //Set 6 new 0xFF bytes into the TX register
+			SET_BIT(SD_EMUL_SPI->IFCR, SPI_IFCR_UDRC); //Clear UDR flag in case it's been set.
+			state = awaiting_cmd; //State is once more awaiting_cmd
 			break;
 		}
 		default: {
