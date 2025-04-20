@@ -76,25 +76,3 @@ void transfer_SPI_DMA(uint8_t *txbuf, uint8_t *rxbuf, unsigned int trans_len) //
 
 	LL_SPI_Enable(SD_EMUL_SPI);
 }
-
-void SD_command_handler(uint8_t num, uint32_t arg, uint8_t crc)
-{
-	switch(num)
-	{
-	case 0: {
-		state = awaiting_cmd; //switch back to "idle" state before sending response
-		HAL_GPIO_TogglePin(USER_LED1_GPIO_Port, USER_LED1_Pin); //debug to see if this actually happens
-		//send response R1 with no errors and "in idle state" true
-		//HAL_SPI_TransmitReceive_DMA(&hspi2, SD_emulator_tx_buffer, SPI2_rx_buffer, transmission_length); //replace me
-		break;
-	}
-	default: {
-		state = error;
-		HAL_GPIO_TogglePin(USER_LED2_GPIO_Port, USER_LED2_Pin);
-
-		//send r1 response with error?
-		break;
-	}
-	}
-}
-
