@@ -243,14 +243,14 @@ void SPI2_IRQHandler(void)
 			{
 				MODIFY_REG(SD_EMUL_SPI->CFG1, SPI_CFG1_FTHLV, LL_SPI_FIFO_TH_05DATA); //Set FIFO threshold to 5, so that the interrupt won't fire again until the rest of the command is received.
 
-				state = waiting_for_cmd_arg;
+				state = receiving_cmd_arg;
 				uint8_t received_command_num; //Make new local variable to avoid performance penalty of volatile.
 				received_command_num = (received_data & ~SD_START_BITS_MASK) | (cmd_is_ACMD << 7); //Mask out start bits, and add ACMD indication if applicable.
 
 				switch(received_command_num) {
 				case CMD(0): { //CMD0: go to idle state.
 					*((__IO uint8_t *)&SD_EMUL_SPI->TXDR) = 0x01; //Send dummy "I'm Ok" R1 response. Maybe change to actually transmit errors if applicable?
-					SET_BIT(SD_EMUL_SPI->IFCR, SPI_IFCR_UDRC); //Clear UDR flag in case it's been set.
+					answer_queued = true; //The answer is released when the UDR bit is cleared after the full command has been received.
 
 					//The command is completed in the waiting_for_cmd_arg case, where the state is set back to awaiting_cmd and FIFO threshold set to 1.
 					break;
@@ -267,21 +267,21 @@ void SPI2_IRQHandler(void)
 
 				command_num = received_command_num; //Write command number to the volatile global variable.
 			}
-			else //If this isn't a start-of-command byte:
-			{
-				*((__IO uint8_t *)&SD_EMUL_SPI->TXDR) = 0xFF; //Send one 0xFF byte to TX FIFO, keeping it at the same level, ready for a command.
-			}
 			break;
 			}
 
-		case waiting_for_cmd_arg: {
+		case receiving_cmd_arg: { //If the unit is finished receiving the command arguments and CRC:
+			if(answer_queued) { //Check if an answer is queued. Clearing UDR bit with no bytes in TX FIFO is a bad idea.
+				SET_BIT(SD_EMUL_SPI->IFCR, SPI_IFCR_UDRC); //Clear UDR flag to release queued answer.
+				answer_queued = false;
+			}
+
 			uint32_t received_cmd_arg = LL_SPI_ReceiveData32(SD_EMUL_SPI); //Retrieve command argument from RX FIFO
 			uint8_t received_cmd_CRC = LL_SPI_ReceiveData8(SD_EMUL_SPI); //Do the same with the last byte of the command
 
 			switch(command_num) {
 			case CMD(0): {
 				//The response has already been queued in the awaiting_cmd case.
-
 				break;
 			}
 
@@ -294,9 +294,6 @@ void SPI2_IRQHandler(void)
 
 			//Get ready to receive another command:
 			MODIFY_REG(SD_EMUL_SPI->CFG1, SPI_CFG1_FTHLV, LL_SPI_FIFO_TH_01DATA); //Set FIFO threshold back to 1,
-			LL_SPI_TransmitData32(SD_EMUL_SPI, 0xFFFFFFFF);
-			//LL_SPI_TransmitData16(SD_EMUL_SPI, 0xFFFF); //Set 6 new 0xFF bytes into the TX register
-			SET_BIT(SD_EMUL_SPI->IFCR, SPI_IFCR_UDRC); //Clear UDR flag in case it's been set.
 			state = awaiting_cmd; //State is once more awaiting_cmd
 			break;
 		}
