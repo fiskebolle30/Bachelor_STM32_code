@@ -29,7 +29,7 @@
 #define SD_ACMD_BITMASK 0b10000000
 
 #define CMD(cmd_num) (cmd_num) //can't be bothered to write all of them lol
-#define ACMD(cmd_num) (cmd_num & SD_ACMD_BITMASK)
+#define ACMD(cmd_num) (cmd_num | SD_ACMD_BITMASK)
 
 
 //Global variables.

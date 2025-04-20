@@ -41,7 +41,7 @@ void SD_emulation_init()
 	LL_SPI_SetFIFOThreshold(SD_EMUL_SPI, LL_SPI_FIFO_TH_01DATA); //Handle one byte at a time while waiting for command.
 	LL_SPI_SetTransferSize(SD_EMUL_SPI, 0); //Transfer length unknown.
 	LL_SPI_EnableIT_RXP(SD_EMUL_SPI); //Enable "packet received" interrupt
-	LL_SPI_EnableIT_UDR(SD_EMUL_SPI); //Enable TX FIFO underrun interrupt
+	//LL_SPI_EnableIT_UDR(SD_EMUL_SPI); //Enable TX FIFO underrun interrupt
 
 	//Start reception of SPI. This is continual, and all of the "action" happens in the SPI interrupt callbacks.
 	state = awaiting_cmd;

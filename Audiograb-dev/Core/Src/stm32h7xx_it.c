@@ -232,30 +232,33 @@ void DMA1_Stream1_IRQHandler(void)
 void SPI2_IRQHandler(void)
 {
   /* USER CODE BEGIN SPI2_IRQn 0 */
-	if(LL_SPI_IsActiveFlag_RXP(SD_EMUL_SPI)) //Replace if() with while()?
+	/*if(LL_SPI_IsActiveFlag_RXP(SD_EMUL_SPI)) //Replace if() with while()?
 	{
-		switch(state) {
+		*/switch(state) {
 		case awaiting_cmd: {
-			HAL_GPIO_TogglePin(USER_LED2_GPIO_Port, USER_LED2_Pin); //Toggle LED for debugging.
+			//HAL_GPIO_TogglePin(USER_LED2_GPIO_Port, USER_LED2_Pin); //Toggle LED for debugging.
 
-			LL_SPI_TransmitData8(SD_EMUL_SPI, 0xFF); //Replenish TX FIFO, keeping it at the same level.
-
-			uint8_t received_data = LL_SPI_ReceiveData8(SD_EMUL_SPI); //Get one byte from RX FIFO
+			uint8_t received_data = (*((__IO uint8_t *)&SD_EMUL_SPI->RXDR)); //Get one byte from RX FIFO
 			if((received_data & SD_START_BITS_MASK) == SD_VALID_START_PATTERN) //If start-of-command pattern detected:
 			{
-				LL_SPI_SetFIFOThreshold(SD_EMUL_SPI, LL_SPI_FIFO_TH_05DATA);//Set FIFO threshold to 5, so that the interrupt won't fire again until the rest of the command is received.
+				MODIFY_REG(SD_EMUL_SPI->CFG1, SPI_CFG1_FTHLV, LL_SPI_FIFO_TH_05DATA); //Set FIFO threshold to 5, so that the interrupt won't fire again until the rest of the command is received.
 
-				LL_SPI_TransmitData16(SD_EMUL_SPI, 0xFFFF); //Transmit enough 0xFF for the rest of the command (3 bytes in addition to the two already queued).
-				LL_SPI_TransmitData8(SD_EMUL_SPI, 0xFF);
+				LL_SPI_TransmitData32(SD_EMUL_SPI, 0xFFFFFFFF); //Transmit enough 0xFF for the rest of the command (4 bytes in addition to the one already queued).
+				SET_BIT(SD_EMUL_SPI->IFCR, SPI_IFCR_UDRC); //Clear UDR flag, in case it's been set.
 
 				state = waiting_for_cmd_arg;
 				uint8_t received_command_num; //Make new local variable to avoid performance penalty of volatile.
 				received_command_num = (received_data & ~SD_START_BITS_MASK) | (cmd_is_ACMD << 7); //Mask out start bits, and add ACMD indication if applicable.
 
 				switch(received_command_num) {
+				case CMD(0): {
+
+					break;
+				}
 				case CMD(55): //The next command is an application-specific command (ACMD).
 				case ACMD(55): { //ACMD55 has the same function as CMD55.
 					cmd_is_ACMD = true;
+					break;
 				}
 				default: {
 
@@ -264,18 +267,28 @@ void SPI2_IRQHandler(void)
 
 				command_num = received_command_num; //Write command number to the volatile global variable.
 			}
+			else //If this isn't a start-of-command byte:
+			{
+				*((__IO uint8_t *)&SD_EMUL_SPI->TXDR) = 0xFF; //Send one 0xFF byte to TX FIFO, keeping it at the same level.
+			}
 			break;
 			}
+		case waiting_for_cmd_arg: {
+			uint32_t received_cmd_arg = LL_SPI_ReceiveData32(SD_EMUL_SPI);
+			uint8_t received_cmd_CRC = LL_SPI_ReceiveData8(SD_EMUL_SPI);
+			command_arg = received_cmd_arg;
+			command_CRC = received_cmd_CRC;
+		}
 		default: {
 
 		}
-		}
-	}
+		} //end of switch(state)
+	/*}
 	if(LL_SPI_IsActiveFlag_UDR(SD_EMUL_SPI))
 	{
 		HAL_GPIO_TogglePin(USER_LED1_GPIO_Port, USER_LED1_Pin); //Ideally this shouldn't happen.
 		LL_SPI_ClearFlag_UDR(SD_EMUL_SPI);
-	}
+	}*/
 
   /* USER CODE END SPI2_IRQn 0 */
   /* USER CODE BEGIN SPI2_IRQn 1 */
