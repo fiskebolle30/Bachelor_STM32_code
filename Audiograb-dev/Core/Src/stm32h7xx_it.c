@@ -235,7 +235,6 @@ void SPI2_IRQHandler(void)
 
 	//Static variables to keep track of SD emulator state.
 	static bool cmd_is_ACMD; //Bool to indicate if the current command is an application-specific command (CMD55 before it)
-	static bool answer_queued;
 
 	static uint8_t command_num; //bit #7 being set (0b10xxxxxx) indicates ACMD
 	static uint32_t command_arg;
@@ -246,9 +245,9 @@ void SPI2_IRQHandler(void)
 	};
 	static enum SD_emulator_state state = awaiting_cmd;
 
-	/*if(LL_SPI_IsActiveFlag_RXP(SD_EMUL_SPI)) //Replace if() with while()?
+	while((SD_EMUL_SPI->SR & SPI_SR_RXP_Msk) == (SPI_SR_RXP)) //Repeat as long as there are packets to be read from rx FIFO:
 	{
-a		*/switch(state) {
+		switch(state) {
 		case awaiting_cmd: {
 			//HAL_GPIO_TogglePin(USER_LED2_GPIO_Port, USER_LED2_Pin); //Toggle LED for debugging.
 
@@ -259,40 +258,19 @@ a		*/switch(state) {
 
 				state = receiving_cmd_arg;
 				command_num = (received_data & ~SD_START_BITS_MASK) | (cmd_is_ACMD << 7); //Mask out start bits, and add ACMD indication if applicable.
-
-				switch(command_num) {
-				case CMD(0): { //CMD0: go to idle state.
-					*((__IO uint8_t *)&SD_EMUL_SPI->TXDR) = 0x01; //Send dummy "I'm Ok" R1 response. Maybe change to actually transmit errors if applicable?
-					answer_queued = true; //The answer is released when the UDR bit is cleared after the full command has been received.
-
-					//The command is completed in the waiting_for_cmd_arg case, where the state is set back to awaiting_cmd and FIFO threshold set to 1.
-					break;
-				}
-				case CMD(55): //CMD55: The next command is an application-specific command (ACMD).
-				case ACMD(55): { //ACMD55 has the same function as CMD55.
-					cmd_is_ACMD = true;
-					break;
-				}
-				default: {
-
-				}
-				}
 			}
 			break;
 			}
 
-		case receiving_cmd_arg: { //If the unit is finished receiving the command arguments and CRC:
-			if(answer_queued) { //Check if an answer is queued. Clearing UDR bit with no bytes in TX FIFO is a bad idea.
-				SET_BIT(SD_EMUL_SPI->IFCR, SPI_IFCR_UDRC); //Clear UDR flag to release queued answer.
-				answer_queued = false;
-			}
+		case receiving_cmd_arg: { //When the unit is finished receiving the command arguments and CRC:
 
 			command_arg = LL_SPI_ReceiveData32(SD_EMUL_SPI); //Retrieve command argument from RX FIFO
 			command_CRC = LL_SPI_ReceiveData8(SD_EMUL_SPI); //Do the same with the last byte of the command
 
 			switch(command_num) {
-			case CMD(0): {
-				//The response has already been queued in the awaiting_cmd case.
+			case CMD(0): { //CMD0: go to idle state.
+				*((__IO uint8_t *)&SD_EMUL_SPI->TXDR) = 0x01; //Send dummy "I'm Ok" R1 response. Maybe change to actually transmit errors if applicable?
+				SET_BIT(SD_EMUL_SPI->IFCR, SPI_IFCR_UDRC); //Clear UDR flag to send response.
 				break;
 			}
 
@@ -310,8 +288,8 @@ a		*/switch(state) {
 			//Should probably throw an error if the state isn't any of the above handled ones.
 		}
 		} //end of switch(state)
-	/*}
-	if(LL_SPI_IsActiveFlag_UDR(SD_EMUL_SPI))
+	}
+	/*if(LL_SPI_IsActiveFlag_UDR(SD_EMUL_SPI))
 	{
 		HAL_GPIO_TogglePin(USER_LED1_GPIO_Port, USER_LED1_Pin); //Ideally this shouldn't happen.
 		LL_SPI_ClearFlag_UDR(SD_EMUL_SPI);
