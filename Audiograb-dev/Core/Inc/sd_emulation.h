@@ -33,22 +33,6 @@
 
 
 //Global variables.
-extern volatile uint8_t SD_emulator_rx_buffer[10];
-extern volatile uint8_t SD_emulator_tx_buffer[10];
-extern unsigned int transmission_length;
-
-extern volatile uint8_t num_packets_in_tx_fifo;
-extern volatile bool cmd_is_ACMD; //Bool to indicate if the current command is an application-specific command (CMD55 before it)
-extern volatile bool answer_queued;
-
-extern uint8_t command_num; //bit #7 being set (0b10xxxxxx) indicates ACMD
-extern uint32_t command_arg;
-extern uint8_t command_CRC;
-
-enum SD_emulator_state {
-	awaiting_cmd, receiving_cmd_arg, error
-};
-extern volatile enum SD_emulator_state state;
 
 
 //Public functions

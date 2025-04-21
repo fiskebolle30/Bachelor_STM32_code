@@ -6,21 +6,6 @@
  */
 #include "sd_emulation.h"
 
-//Definition of global variables. These are global to permit them being accessed in the interrupt callback(s).
-volatile uint8_t SD_emulator_rx_buffer[10];
-volatile uint8_t SD_emulator_tx_buffer[10];
-unsigned int transmission_length;
-
-volatile uint8_t num_packets_in_tx_fifo = 0;
-volatile bool cmd_is_ACMD; //Replace this with static int in interrupt function? Would probably increase performance.
-volatile bool answer_queued;
-
-uint8_t command_num; //bit #7 being set (0b10xxxxxx) indicates ACMD
-uint32_t command_arg;
-uint8_t command_CRC;
-
-volatile enum SD_emulator_state state;
-
 //Private function prototypes:
 void SPI_TX_RX_complete_callback(/*SPI_HandleTypeDef *hspi*/);
 void SD_command_handler(uint8_t num, uint32_t arg, uint8_t crc);
@@ -45,7 +30,6 @@ void SD_emulation_init()
 	//LL_SPI_EnableIT_UDR(SD_EMUL_SPI); //Enable TX FIFO underrun interrupt
 
 	//Start reception of SPI. This is continual, and all of the "action" happens in the SPI interrupt callbacks. Dummy bytes are provided by the underrun system.
-	state = awaiting_cmd;
 	LL_SPI_Enable(SD_EMUL_SPI);
 	LL_SPI_TransmitData8(SD_EMUL_SPI, 0xFF); //Underrun system starts at the second byte, so we provide the first one.
 }

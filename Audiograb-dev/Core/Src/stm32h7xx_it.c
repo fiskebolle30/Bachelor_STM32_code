@@ -232,9 +232,23 @@ void DMA1_Stream1_IRQHandler(void)
 void SPI2_IRQHandler(void)
 {
   /* USER CODE BEGIN SPI2_IRQn 0 */
+
+	//Static variables to keep track of SD emulator state.
+	static bool cmd_is_ACMD; //Bool to indicate if the current command is an application-specific command (CMD55 before it)
+	static bool answer_queued;
+
+	static uint8_t command_num; //bit #7 being set (0b10xxxxxx) indicates ACMD
+	static uint32_t command_arg;
+	static uint8_t command_CRC;
+
+	enum SD_emulator_state {
+		awaiting_cmd, receiving_cmd_arg, error
+	};
+	static enum SD_emulator_state state = awaiting_cmd;
+
 	/*if(LL_SPI_IsActiveFlag_RXP(SD_EMUL_SPI)) //Replace if() with while()?
 	{
-		*/switch(state) {
+a		*/switch(state) {
 		case awaiting_cmd: {
 			//HAL_GPIO_TogglePin(USER_LED2_GPIO_Port, USER_LED2_Pin); //Toggle LED for debugging.
 
@@ -244,10 +258,9 @@ void SPI2_IRQHandler(void)
 				MODIFY_REG(SD_EMUL_SPI->CFG1, SPI_CFG1_FTHLV, LL_SPI_FIFO_TH_05DATA); //Set FIFO threshold to 5, so that the interrupt won't fire again until the rest of the command is received.
 
 				state = receiving_cmd_arg;
-				uint8_t received_command_num; //Make new local variable to avoid performance penalty of volatile.
-				received_command_num = (received_data & ~SD_START_BITS_MASK) | (cmd_is_ACMD << 7); //Mask out start bits, and add ACMD indication if applicable.
+				command_num = (received_data & ~SD_START_BITS_MASK) | (cmd_is_ACMD << 7); //Mask out start bits, and add ACMD indication if applicable.
 
-				switch(received_command_num) {
+				switch(command_num) {
 				case CMD(0): { //CMD0: go to idle state.
 					*((__IO uint8_t *)&SD_EMUL_SPI->TXDR) = 0x01; //Send dummy "I'm Ok" R1 response. Maybe change to actually transmit errors if applicable?
 					answer_queued = true; //The answer is released when the UDR bit is cleared after the full command has been received.
@@ -264,8 +277,6 @@ void SPI2_IRQHandler(void)
 
 				}
 				}
-
-				command_num = received_command_num; //Write command number to the volatile global variable.
 			}
 			break;
 			}
@@ -276,8 +287,8 @@ void SPI2_IRQHandler(void)
 				answer_queued = false;
 			}
 
-			uint32_t received_cmd_arg = LL_SPI_ReceiveData32(SD_EMUL_SPI); //Retrieve command argument from RX FIFO
-			uint8_t received_cmd_CRC = LL_SPI_ReceiveData8(SD_EMUL_SPI); //Do the same with the last byte of the command
+			command_arg = LL_SPI_ReceiveData32(SD_EMUL_SPI); //Retrieve command argument from RX FIFO
+			command_CRC = LL_SPI_ReceiveData8(SD_EMUL_SPI); //Do the same with the last byte of the command
 
 			switch(command_num) {
 			case CMD(0): {
@@ -289,8 +300,6 @@ void SPI2_IRQHandler(void)
 
 			}
 			}
-			command_arg = received_cmd_arg; //Write to global registers. Not sure if this is necessary,
-			command_CRC = received_cmd_CRC; //I think this data is only used in the interrupt.
 
 			//Get ready to receive another command:
 			MODIFY_REG(SD_EMUL_SPI->CFG1, SPI_CFG1_FTHLV, LL_SPI_FIFO_TH_01DATA); //Set FIFO threshold back to 1,
