@@ -232,6 +232,10 @@ void DMA1_Stream1_IRQHandler(void)
 void SPI2_IRQHandler(void)
 {
   /* USER CODE BEGIN SPI2_IRQn 0 */
+	/*	This function is expecting compiler optimization to be turned on.
+	 *	When debugging, consider changing optimization flags to -Og and
+	 *	if things then break, try turning CPU speed up.
+	 */
 
 	//Static variables to keep track of SD emulator state.
 	static bool cmd_is_ACMD; //Bool to indicate if the current command is an application-specific command (CMD55 before it)
@@ -245,19 +249,23 @@ void SPI2_IRQHandler(void)
 	};
 	static enum SD_emulator_state state = awaiting_cmd;
 
-	while((SD_EMUL_SPI->SR & SPI_SR_RXP_Msk) == (SPI_SR_RXP)) //Repeat as long as there are packets to be read from rx FIFO:
+	while(LL_SPI_IsActiveFlag_RXP(SD_EMUL_SPI)) //Repeat as long as there are packets to be read from rx FIFO:
 	{
 		switch(state) {
 		case awaiting_cmd: {
 			//HAL_GPIO_TogglePin(USER_LED2_GPIO_Port, USER_LED2_Pin); //Toggle LED for debugging.
 
-			uint8_t received_data = (*((__IO uint8_t *)&SD_EMUL_SPI->RXDR)); //Get one byte from RX FIFO
+			uint8_t received_data = LL_SPI_ReceiveData8(SD_EMUL_SPI); //Get one byte from RX FIFO
 			if((received_data & SD_START_BITS_MASK) == SD_VALID_START_PATTERN) //If start-of-command pattern detected:
 			{
-				MODIFY_REG(SD_EMUL_SPI->CFG1, SPI_CFG1_FTHLV, LL_SPI_FIFO_TH_05DATA); //Set FIFO threshold to 5, so that the interrupt won't fire again until the rest of the command is received.
+				LL_SPI_SetFIFOThreshold(SD_EMUL_SPI, LL_SPI_FIFO_TH_05DATA); //Set FIFO threshold to 5, so that the interrupt won't fire again until the rest of the command is received.
 
 				state = receiving_cmd_arg;
 				command_num = (received_data & ~SD_START_BITS_MASK) | (cmd_is_ACMD << 7); //Mask out start bits, and add ACMD indication if applicable.
+			}
+			for(int i = 0; i < 30; ++i) //Delay i*3-ish cycles (see disassembly for accurate number).
+			{
+				__NOP();
 			}
 			break;
 			}
@@ -274,8 +282,9 @@ void SPI2_IRQHandler(void)
 				{
 					R1_status |= R1_COM_CRC_ERR_MSK; //set CRC error bit in R1 response.
 				}
-				*((__IO uint8_t *)&SD_EMUL_SPI->TXDR) R1_status; //Send R1 response.
-				SET_BIT(SD_EMUL_SPI->IFCR, SPI_IFCR_UDRC); //Clear UDR flag to send response.
+				LL_SPI_TransmitData32(SD_EMUL_SPI, command_arg); //DEBUG: Send back the argument received.
+				LL_SPI_TransmitData8(SD_EMUL_SPI, command_CRC); //DEBUG: send back received CRC. //R1_status; //Send R1 response.
+				LL_SPI_ClearFlag_UDR(SD_EMUL_SPI); //Clear UDR flag to send response.
 				R1_status = (R1_status & R1_IDLE_STATE_MSK); //Clear all error flags when reading them, as described in
 				//SD Specifications Part 1 Physical Layer Simplified Specification Version 9.10, section 7.3.4
 				break;
@@ -287,7 +296,7 @@ void SPI2_IRQHandler(void)
 			}
 
 			//Get ready to receive another command:
-			MODIFY_REG(SD_EMUL_SPI->CFG1, SPI_CFG1_FTHLV, LL_SPI_FIFO_TH_01DATA); //Set FIFO threshold back to 1,
+			LL_SPI_SetFIFOThreshold(SD_EMUL_SPI, LL_SPI_FIFO_TH_05DATA); //Set FIFO threshold back to 1,
 			state = awaiting_cmd; //State is once more awaiting_cmd
 			break;
 		}

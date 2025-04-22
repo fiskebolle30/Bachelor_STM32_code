@@ -68,7 +68,7 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
-
+	//Make sure to turn on compiler optimizations before compiling! The interrupt handlers may be too slow if optimizations aren't turned on (-O0 or -Og).
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
