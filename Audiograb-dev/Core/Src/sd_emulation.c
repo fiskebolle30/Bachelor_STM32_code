@@ -10,6 +10,9 @@
 void SPI_TX_RX_complete_callback(/*SPI_HandleTypeDef *hspi*/);
 void SD_command_handler(uint8_t num, uint32_t arg, uint8_t crc);
 
+//Global variables
+volatile uint8_t R1_status = R1_IDLE_STATE_MSK; //This is the variable containing the status bits of the R1 response. Initialized to no errors, and in idle state.
+
 
 //Function declarations:
 void SD_emulation_init()

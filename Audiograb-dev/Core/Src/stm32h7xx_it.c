@@ -269,8 +269,15 @@ void SPI2_IRQHandler(void)
 
 			switch(command_num) {
 			case CMD(0): { //CMD0: go to idle state.
-				*((__IO uint8_t *)&SD_EMUL_SPI->TXDR) = 0x01; //Send dummy "I'm Ok" R1 response. Maybe change to actually transmit errors if applicable?
+				//Should probably maybe technically be setting the IDLE bit to '1' here, but I'll get there when writing the part clearing the idle bit.
+				if(command_CRC != CMD0_FINALBYTE) //If the CRC isn't the expected value:
+				{
+					R1_status |= R1_COM_CRC_ERR_MSK; //set CRC error bit in R1 response.
+				}
+				*((__IO uint8_t *)&SD_EMUL_SPI->TXDR) R1_status; //Send R1 response.
 				SET_BIT(SD_EMUL_SPI->IFCR, SPI_IFCR_UDRC); //Clear UDR flag to send response.
+				R1_status = (R1_status & R1_IDLE_STATE_MSK); //Clear all error flags when reading them, as described in
+				//SD Specifications Part 1 Physical Layer Simplified Specification Version 9.10, section 7.3.4
 				break;
 			}
 

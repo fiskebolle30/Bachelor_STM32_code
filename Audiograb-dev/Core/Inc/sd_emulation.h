@@ -31,9 +31,22 @@
 #define CMD(cmd_num) (cmd_num) //can't be bothered to write all of them lol
 #define ACMD(cmd_num) (cmd_num | SD_ACMD_BITMASK)
 
+#define CMD0_CRC 0x94 //Valid CRC value of CMD0, according to https://rjhcoding.com/avrc-sd-interface-1.php. This matches with observations from a real SD card transaction.
+#define CMD0_FINALBYTE 0x95 //Final bit is always 1.
+#define CRC_MSK 0xFE //The 7 first bits in the final byte contain the CRC.
+
 
 //Global variables.
-
+extern volatile uint8_t R1_status; //This is the variable containing the status bits of the R1 response.
+//Definition of bits in the R1 status register.
+//Bit 7 is always 0.
+#define R1_PARAM_ERR_MSK (1 << 6)
+#define R1_ADDR_ERR_MSK (1 << 5)
+#define R1_ERASE_SEQ_ERR_MSK (1 << 4)
+#define R1_COM_CRC_ERR_MSK (1 << 3)
+#define R1_ILLEGAL_CMD_MSK (1 << 2)
+#define R1_ERASE_RST_MSK (1 << 1)
+#define R1_IDLE_STATE_MSK (1 << 0)
 
 //Public functions
 void SD_emulation_init();
