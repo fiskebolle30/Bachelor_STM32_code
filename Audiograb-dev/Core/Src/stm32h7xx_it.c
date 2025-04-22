@@ -263,15 +263,16 @@ void SPI2_IRQHandler(void)
 				state = receiving_cmd_arg;
 				command_num = (received_data & ~SD_START_BITS_MASK) | (cmd_is_ACMD << 7); //Mask out start bits, and add ACMD indication if applicable.
 			}
-			for(int i = 0; i < 30; ++i) //Delay i*3-ish cycles (see disassembly for accurate number).
-			{
-				__NOP();
+			for(int i = 0; i < 50; ++i) //Delay i*3-ish cycles (see disassembly for accurate number). This is to ensure that enough time
+			{							//passes for the RXP flag to reset after changing FIFO threshold. The minimum value at 144MHz F_CPU seems to be 90.
+				__NOP();				//TODO: make a more robust solution to this problem.
 			}
 			break;
 			}
 
 		case receiving_cmd_arg: { //When the unit is finished receiving the command arguments and CRC:
 
+			//command_arg = 0;
 			command_arg = LL_SPI_ReceiveData32(SD_EMUL_SPI); //Retrieve command argument from RX FIFO
 			command_CRC = LL_SPI_ReceiveData8(SD_EMUL_SPI); //Do the same with the last byte of the command
 
