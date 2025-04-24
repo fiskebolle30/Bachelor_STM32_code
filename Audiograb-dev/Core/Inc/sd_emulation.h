@@ -62,6 +62,9 @@ extern volatile uint32_t OCR; //The operation conditions register stores the "ca
 #define OCR_POWERUP_STATUS_MSK (1 << 31) //This bit is low if the "card" hasn't powered up yet
 #define OCR_STATIC_PARAMS (0x1FF << 15) /*voltage between 2.7-3.6 supported.*/
 
+extern volatile bool HCS; //The Host Capacity Support bit indicates if the host supports high capacity SD cards (SDHC & SDUC).
+
+
 //Public functions
 void SD_emulation_init();
 

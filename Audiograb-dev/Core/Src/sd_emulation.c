@@ -15,12 +15,13 @@ volatile uint8_t R1_status = R1_IDLE_STATE_MSK; //This is the variable containin
 
 volatile uint32_t OCR = (OCR_CCS_MSK | OCR_POWERUP_STATUS_MSK | OCR_STATIC_PARAMS); //The operation conditions register stores the "card"'s accepted voltage range, and some other info.
 
+volatile bool HCS = false;
 
 //Function declarations:
 void SD_emulation_init()
 {
 	MX_SPI2_Init(); //Init SPI.
-	LL_SPI_SetUDRPattern(SD_EMUL_SPI, 0xFFFFFFFF); //During debug: send distinct pattern so I know it's an underrun byte. //Send only ones on TX buffer underrun, as this means the "SD card" is processing/busy.
+	LL_SPI_SetUDRPattern(SD_EMUL_SPI, 0xFFFFFFFF); //Send only ones on TX buffer underrun, as this means the "SD card" is processing/busy.
 	LL_SPI_SetUDRConfiguration(SD_EMUL_SPI, LL_SPI_UDR_CONFIG_REGISTER_PATTERN);
 	LL_SPI_SetUDRDetection(SD_EMUL_SPI, LL_SPI_UDR_DETECT_END_DATA_FRAME); //register underrun immediately when the TX FIFO is empty.
 	LL_SPI_EnableIOLock(SD_EMUL_SPI); //The SPI IO settings shouldn't change ever anyways (I think lol).
@@ -38,6 +39,7 @@ void SD_emulation_init()
 	LL_SPI_Enable(SD_EMUL_SPI);
 	LL_SPI_TransmitData8(SD_EMUL_SPI, 0xFF); //Underrun system starts at the second byte, so we provide the first one.
 }
+
 
 void transfer_SPI_DMA(uint8_t *txbuf, uint8_t *rxbuf, unsigned int trans_len) //Kind of unfinished, something something surprise tool that will help us later
 {

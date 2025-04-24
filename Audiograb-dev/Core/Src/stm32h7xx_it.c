@@ -262,6 +262,7 @@ void SPI2_IRQHandler(void)
 
 				state = receiving_cmd_arg;
 				command_num = (received_data & ~SD_START_BITS_MASK) | (cmd_is_ACMD << 7); //Mask out start bits, and add ACMD indication if applicable.
+				cmd_is_ACMD = false; //Reset ACMD bool in preparation for next reception.
 			}
 			for(int i = 0; i < 30; ++i) //Delay i*3-ish cycles (see disassembly for accurate number). This is to ensure that enough time
 			{							//passes for the RXP flag to reset after changing FIFO threshold. The minimum value at 144MHz F_CPU seems to be 90.
@@ -279,6 +280,7 @@ void SPI2_IRQHandler(void)
 			command_CRC = LL_SPI_ReceiveData8(SD_EMUL_SPI); //Do the same with the last byte of the command
 
 			switch(command_num) {
+
 			case CMD(0): { //CMD0: go to idle state.
 				//Should probably maybe technically be setting the IDLE bit to '1' here, but I'll get there when writing the part clearing the idle bit.
 				if(command_CRC != CMD0_EXPECTED_FINALBYTE) //If the CRC isn't the expected value:
@@ -293,8 +295,6 @@ void SPI2_IRQHandler(void)
 			}
 
 			case CMD(8): { //CMD8: SEND_IF_COND
-
-				//LL_SPI_TransmitData32(SD_EMUL_SPI, (command_arg));
 
 				if(command_CRC != CMD8_EXPECTED_FINALBYTE)
 				{
@@ -321,13 +321,28 @@ void SPI2_IRQHandler(void)
 				break;
 			}
 
+			case CMD(55): //CMD55: The next command is an application-specific one (ACMD).
+			case ACMD(55): { //ACMD55 has the same functionality as CMD55.
+
+				cmd_is_ACMD = true;
+
+				LL_SPI_TransmitData8(SD_EMUL_SPI, R1_status); //Send R1 response.
+				LL_SPI_ClearFlag_UDR(SD_EMUL_SPI); //Begin transmission.
+				R1_status = (R1_status & R1_IDLE_STATE_MSK); //Clear all error flags when reading them.
+				break;
+			}
+
+			case ACMD(41): {
+
+			}
+
 			default: { //Not an implemented/known command
 				R1_status |= R1_ILLEGAL_CMD_MSK; //Set the illegal command bit in R1
 				LL_SPI_TransmitData8(SD_EMUL_SPI, R1_status); //Send R1 response.
 				LL_SPI_ClearFlag_UDR(SD_EMUL_SPI); //Clear UDR flag to send response.
 				R1_status = (R1_status & R1_IDLE_STATE_MSK); //Clear all error flags when the host reads them.
 			}
-			}
+			} //end of switch(command_num)
 
 			//Get ready to receive another command:
 			LL_SPI_SetFIFOThreshold(SD_EMUL_SPI, LL_SPI_FIFO_TH_05DATA); //Set FIFO threshold back to 1,
