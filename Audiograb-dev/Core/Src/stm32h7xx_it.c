@@ -263,7 +263,7 @@ void SPI2_IRQHandler(void)
 				state = receiving_cmd_arg;
 				command_num = (received_data & ~SD_START_BITS_MASK) | (cmd_is_ACMD << 7); //Mask out start bits, and add ACMD indication if applicable.
 			}
-			for(int i = 0; i < 50; ++i) //Delay i*3-ish cycles (see disassembly for accurate number). This is to ensure that enough time
+			for(int i = 0; i < 30; ++i) //Delay i*3-ish cycles (see disassembly for accurate number). This is to ensure that enough time
 			{							//passes for the RXP flag to reset after changing FIFO threshold. The minimum value at 144MHz F_CPU seems to be 90.
 				__NOP();				//TODO: make a more robust solution to this problem.
 			}
@@ -272,27 +272,60 @@ void SPI2_IRQHandler(void)
 
 		case receiving_cmd_arg: { //When the unit is finished receiving the command arguments and CRC:
 
-			//command_arg = 0;
-			command_arg = LL_SPI_ReceiveData32(SD_EMUL_SPI); //Retrieve command argument from RX FIFO
+			command_arg = (LL_SPI_ReceiveData8(SD_EMUL_SPI) << 24); //Retrieve command argument from RX FIFO
+			command_arg |= (LL_SPI_ReceiveData8(SD_EMUL_SPI) << 16); //This is done using receive8 instead of 32 to make it little-endian
+			command_arg |= (LL_SPI_ReceiveData8(SD_EMUL_SPI) << 8);
+			command_arg |= (LL_SPI_ReceiveData8(SD_EMUL_SPI) << 0);
 			command_CRC = LL_SPI_ReceiveData8(SD_EMUL_SPI); //Do the same with the last byte of the command
 
 			switch(command_num) {
 			case CMD(0): { //CMD0: go to idle state.
 				//Should probably maybe technically be setting the IDLE bit to '1' here, but I'll get there when writing the part clearing the idle bit.
-				if(command_CRC != CMD0_FINALBYTE) //If the CRC isn't the expected value:
+				if(command_CRC != CMD0_EXPECTED_FINALBYTE) //If the CRC isn't the expected value:
 				{
 					R1_status |= R1_COM_CRC_ERR_MSK; //set CRC error bit in R1 response.
 				}
-				LL_SPI_TransmitData32(SD_EMUL_SPI, command_arg); //DEBUG: Send back the argument received.
-				LL_SPI_TransmitData8(SD_EMUL_SPI, command_CRC); //DEBUG: send back received CRC. //R1_status; //Send R1 response.
+				LL_SPI_TransmitData8(SD_EMUL_SPI, R1_status); //Send R1 response.
 				LL_SPI_ClearFlag_UDR(SD_EMUL_SPI); //Clear UDR flag to send response.
 				R1_status = (R1_status & R1_IDLE_STATE_MSK); //Clear all error flags when reading them, as described in
 				//SD Specifications Part 1 Physical Layer Simplified Specification Version 9.10, section 7.3.4
 				break;
 			}
 
-			default: {
+			case CMD(8): { //CMD8: SEND_IF_COND
 
+				//LL_SPI_TransmitData32(SD_EMUL_SPI, (command_arg));
+
+				if(command_CRC != CMD8_EXPECTED_FINALBYTE)
+				{
+					R1_status |= R1_COM_CRC_ERR_MSK; //set CRC error bit in R1 response.
+					LL_SPI_TransmitData8(SD_EMUL_SPI, R1_status); //Send R1 response.
+					LL_SPI_ClearFlag_UDR(SD_EMUL_SPI); //Begin transmission (Only R1 on wrong CRC)
+					R1_status = (R1_status & R1_IDLE_STATE_MSK); //Clear all error flags when reading them.
+					break;
+				}
+
+				LL_SPI_TransmitData8(SD_EMUL_SPI, R1_status); //Send R1 response, which is the start of the R7 response
+				uint32_t rest_of_R7 = 0;
+				if((command_arg & CMD8_VOLTAGE_ACCEPTED_MSK) == CMD8_2V7_3V6_ACCEPTED) //Only send back voltage accepted field if it's the correct voltage for the "card"
+				{
+					rest_of_R7 |= (command_arg & CMD8_VOLTAGE_ACCEPTED_MSK); //Send back the voltage accepted field to indicate the SD card accepts it.
+				}
+				rest_of_R7 |= (command_arg & R7_ECHO_BACK_MSK); //Send back the last byte of the argument.
+
+				LL_SPI_TransmitData8(SD_EMUL_SPI, (rest_of_R7 >> 24)); //Send word big-endian, so that the order the bytes appear in on the bus
+				LL_SPI_TransmitData8(SD_EMUL_SPI, (rest_of_R7 >> 16)); //are the same as the way they are organized in memory.
+				LL_SPI_TransmitData8(SD_EMUL_SPI, (rest_of_R7 >> 8));  //(TransmitData32 is little-endian by necessity).
+				LL_SPI_TransmitData8(SD_EMUL_SPI, (rest_of_R7 >> 0));
+				LL_SPI_ClearFlag_UDR(SD_EMUL_SPI); //Begin transmission
+				break;
+			}
+
+			default: { //Not an implemented/known command
+				R1_status |= R1_ILLEGAL_CMD_MSK; //Set the illegal command bit in R1
+				LL_SPI_TransmitData8(SD_EMUL_SPI, R1_status); //Send R1 response.
+				LL_SPI_ClearFlag_UDR(SD_EMUL_SPI); //Clear UDR flag to send response.
+				R1_status = (R1_status & R1_IDLE_STATE_MSK); //Clear all error flags when the host reads them.
 			}
 			}
 
@@ -302,7 +335,7 @@ void SPI2_IRQHandler(void)
 			break;
 		}
 		default: {
-			//Should probably throw an error if the state isn't any of the above handled ones.
+			//Should probably throw an error here if the state isn't a known state
 		}
 		} //end of switch(state)
 	}

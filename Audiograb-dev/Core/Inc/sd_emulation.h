@@ -31,9 +31,17 @@
 #define CMD(cmd_num) (cmd_num) //can't be bothered to write all of them lol
 #define ACMD(cmd_num) (cmd_num | SD_ACMD_BITMASK)
 
+//Definitions for CMD0
 #define CMD0_CRC 0x94 //Valid CRC value of CMD0, according to https://rjhcoding.com/avrc-sd-interface-1.php. This matches with observations from a real SD card transaction.
-#define CMD0_FINALBYTE 0x95 //Final bit is always 1.
+#define CMD0_EXPECTED_FINALBYTE 0x95 //Final bit is always 1.
 #define CRC_MSK 0xFE //The 7 first bits in the final byte contain the CRC.
+
+//Definitions for CMD8
+#define CMD8_CRC 0x86
+#define CMD8_EXPECTED_FINALBYTE 0x87
+#define CMD8_VOLTAGE_ACCEPTED_MSK (0x0F << 8)
+#define CMD8_2V7_3V6_ACCEPTED (0x01 << 8) //The first bit of the "voltage accepted" field indicates 2.7V-3.6V.
+#define R7_ECHO_BACK_MSK (0xFF << 0) //The echo-back in R7 is the last byte of both R7 and the CMD8 argument.
 
 
 //Global variables.
@@ -47,6 +55,12 @@ extern volatile uint8_t R1_status; //This is the variable containing the status 
 #define R1_ILLEGAL_CMD_MSK (1 << 2)
 #define R1_ERASE_RST_MSK (1 << 1)
 #define R1_IDLE_STATE_MSK (1 << 0)
+
+extern volatile uint32_t OCR; //The operation conditions register stores the "card"'s accepted voltage range, and some other info.
+//The bits in the register are defined in the SD card physical layer spec, under section 5.1.
+#define OCR_CCS_MSK (1 << 30) //The card capacity status bit
+#define OCR_POWERUP_STATUS_MSK (1 << 31) //This bit is low if the "card" hasn't powered up yet
+#define OCR_STATIC_PARAMS (0x1FF << 15) /*voltage between 2.7-3.6 supported.*/
 
 //Public functions
 void SD_emulation_init();
