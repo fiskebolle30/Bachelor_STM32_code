@@ -40,14 +40,22 @@ int main()
     // Example to turn on the Pico W LED
     cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 1);
 
-    char received[20] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+    char received[200] = {0xFF, (0x40 | 55)/*CMDXX*/, 0x00, 0x00, 0x01, 0b10101010, (0x86 | 1), 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
     while (true) {
-        received[0] = getc(stdin); //Wait for character from PC
-        printf("Hello, world! %c received.\n", received[0]);
+        received[1] = (0x40 | 55);
+        /*received[0] = */getc(stdin); //Wait for character from PC
+        printf("Hello, world! %c received.\n", received[1]);
         gpio_put(PIN_CS, 0); //activate CS
         spi_write_blocking(SPI_PORT, received, 20);
-        //spi_write_blocking(SPI_PORT, &received, 1);
+        gpio_put(PIN_CS, 1); //deactivate CS
+
+        spi_write_blocking(SPI_PORT, received, 1); //Push a dummy byte or ten while CS is deactivated for spacing
+        received[1] = (0x40 | 41); //send ACMD41
+        received[2] = 0xFF;
+        gpio_put(PIN_CS, 0); //activate CS
+        spi_write_blocking(SPI_PORT, received, 20);
         gpio_put(PIN_CS, 1); //deactivate CS
     }
 }
