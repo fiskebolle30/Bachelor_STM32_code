@@ -39,13 +39,10 @@
      PG9   ------> OCTOSPIM_P1_IO6
      PD7   ------> OCTOSPIM_P1_IO7
      PD1   ------> FMC_D3_DA3
-     PC10   ------> SDMMC1_D2
      PE0   ------> FMC_NBL0
      PK6   ------> LTDC_B7
      PK3   ------> LTDC_B4
      PJ15   ------> LTDC_B3
-     PD2   ------> SDMMC1_CMD
-     PC12   ------> SDMMC1_CK
      PE1   ------> FMC_NBL1
      PK4   ------> LTDC_B5
      PG12   ------> I2S6_SDI
@@ -54,12 +51,9 @@
      PK7   ------> LTDC_DE
      PG13   ------> I2S6_CK
      PJ13   ------> LTDC_B1
-     PC11   ------> SDMMC1_D3
      PJ12   ------> LTDC_B0
      PA10   ------> USART1_RX
-     PC9   ------> SDMMC1_D1
      PA9   ------> USART1_TX
-     PC8   ------> SDMMC1_D0
      PG8   ------> FMC_SDCLK
      PF1   ------> FMC_A1
      PF0   ------> FMC_A0
@@ -242,16 +236,6 @@ void MX_GPIO_Init(void)
   GPIO_InitStruct.Alternate = GPIO_AF12_FMC;
   HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : SDIO1_D2_Pin SDIO1_CK_Pin SDIO1_D3_Pin SDIO1_D1_Pin
-                           SDIO1_D0_Pin */
-  GPIO_InitStruct.Pin = SDIO1_D2_Pin|SDIO1_CK_Pin|SDIO1_D3_Pin|SDIO1_D1_Pin
-                          |SDIO1_D0_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
-  GPIO_InitStruct.Alternate = GPIO_AF12_SDMMC1;
-  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
-
   /*Configure GPIO pins : WIFI_BOOT_Pin WIFI_WKUP_Pin WIFI_RST_Pin */
   GPIO_InitStruct.Pin = WIFI_BOOT_Pin|WIFI_WKUP_Pin|WIFI_RST_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
@@ -299,14 +283,6 @@ void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   GPIO_InitStruct.Alternate = GPIO_AF14_LTDC;
   HAL_GPIO_Init(GPIOJ, &GPIO_InitStruct);
-
-  /*Configure GPIO pin : SDIO1_CMD_Pin */
-  GPIO_InitStruct.Pin = SDIO1_CMD_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
-  GPIO_InitStruct.Alternate = GPIO_AF12_SDMMC1;
-  HAL_GPIO_Init(SDIO1_CMD_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pins : PH15 PH14 PH13 PH12
                            PH4 PH10 PH9 PH8
