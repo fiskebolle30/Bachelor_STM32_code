@@ -44,7 +44,9 @@
 #define R7_ECHO_BACK_MSK (0xFF << 0) //The echo-back in R7 is the last byte of both R7 and the CMD8 argument.
 
 
-//Global variables.
+//Global variable definitions
+extern volatile bool card_initialized; //Variable to keep track of if the device is ready to tell the SD card host that it's initialized.
+
 extern volatile uint8_t R1_status; //This is the variable containing the status bits of the R1 response.
 //Definition of bits in the R1 status register.
 //Bit 7 is always 0.
@@ -63,6 +65,7 @@ extern volatile uint32_t OCR; //The operation conditions register stores the "ca
 #define OCR_STATIC_PARAMS (0x1FF << 15) /*voltage between 2.7-3.6 supported.*/
 
 extern volatile bool HCS; //The Host Capacity Support bit indicates if the host supports high capacity SD cards (SDHC & SDUC).
+#define HCS_BIT_MSK (1 << 30) //The HCS is located in bit 30 of the command argument for ACMD41 and CMD1.
 
 
 //Public functions

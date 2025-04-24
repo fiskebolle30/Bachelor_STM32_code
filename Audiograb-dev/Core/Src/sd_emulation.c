@@ -10,7 +10,9 @@
 void SPI_TX_RX_complete_callback(/*SPI_HandleTypeDef *hspi*/);
 void SD_command_handler(uint8_t num, uint32_t arg, uint8_t crc);
 
-//Global variables
+//Global variable initializations
+volatile bool card_initialized = false; //Variable to keep track of if the device is ready to tell the SD card host that it's initialized.
+
 volatile uint8_t R1_status = R1_IDLE_STATE_MSK; //This is the variable containing the status bits of the R1 response. Initialized to no errors, and in idle state.
 
 volatile uint32_t OCR = (OCR_CCS_MSK | OCR_POWERUP_STATUS_MSK | OCR_STATIC_PARAMS); //The operation conditions register stores the "card"'s accepted voltage range, and some other info.

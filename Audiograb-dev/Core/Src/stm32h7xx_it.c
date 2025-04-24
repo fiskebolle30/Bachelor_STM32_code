@@ -232,6 +232,7 @@ void DMA1_Stream1_IRQHandler(void)
 void SPI2_IRQHandler(void)
 {
   /* USER CODE BEGIN SPI2_IRQn 0 */
+	//SD emulator IRQ.
 	/*	This function is expecting compiler optimization to be turned on.
 	 *	When debugging, consider changing optimization flags to -Og and
 	 *	if things then break, try turning CPU speed up.
@@ -279,16 +280,23 @@ void SPI2_IRQHandler(void)
 			command_arg |= (LL_SPI_ReceiveData8(SD_EMUL_SPI) << 0);
 			command_CRC = LL_SPI_ReceiveData8(SD_EMUL_SPI); //Do the same with the last byte of the command
 
+			LL_SPI_ReceiveData32(SD_EMUL_SPI); //Throw away any bytes that have come after the end of command but before answer.
+			LL_SPI_ReceiveData32(SD_EMUL_SPI);
+
 			switch(command_num) {
 
 			case CMD(0): { //CMD0: go to idle state.
-				//Should probably maybe technically be setting the IDLE bit to '1' here, but I'll get there when writing the part clearing the idle bit.
+
+				R1_status |= R1_IDLE_STATE_MSK; //Enter idle state.
+
 				if(command_CRC != CMD0_EXPECTED_FINALBYTE) //If the CRC isn't the expected value:
 				{
 					R1_status |= R1_COM_CRC_ERR_MSK; //set CRC error bit in R1 response.
 				}
+
 				LL_SPI_TransmitData8(SD_EMUL_SPI, R1_status); //Send R1 response.
 				LL_SPI_ClearFlag_UDR(SD_EMUL_SPI); //Clear UDR flag to send response.
+
 				R1_status = (R1_status & R1_IDLE_STATE_MSK); //Clear all error flags when reading them, as described in
 				//SD Specifications Part 1 Physical Layer Simplified Specification Version 9.10, section 7.3.4
 				break;
@@ -309,11 +317,11 @@ void SPI2_IRQHandler(void)
 				uint32_t rest_of_R7 = 0;
 				if((command_arg & CMD8_VOLTAGE_ACCEPTED_MSK) == CMD8_2V7_3V6_ACCEPTED) //Only send back voltage accepted field if it's the correct voltage for the "card"
 				{
-					rest_of_R7 |= (command_arg & CMD8_VOLTAGE_ACCEPTED_MSK); //Send back the voltage accepted field to indicate the SD card accepts it.
+					rest_of_R7 |= (command_arg & CMD8_VOLTAGE_ACCEPTED_MSK); //Echo back the voltage accepted field to indicate the SD card accepts it.
 				}
 				rest_of_R7 |= (command_arg & R7_ECHO_BACK_MSK); //Send back the last byte of the argument.
 
-				LL_SPI_TransmitData8(SD_EMUL_SPI, (rest_of_R7 >> 24)); //Send word big-endian, so that the order the bytes appear in on the bus
+				LL_SPI_TransmitData8(SD_EMUL_SPI, (rest_of_R7 >> 24)); //Send word big-endian, so that the order the bytes appear in on the bus (and in the simplified spec document)
 				LL_SPI_TransmitData8(SD_EMUL_SPI, (rest_of_R7 >> 16)); //are the same as the way they are organized in memory.
 				LL_SPI_TransmitData8(SD_EMUL_SPI, (rest_of_R7 >> 8));  //(TransmitData32 is little-endian by necessity).
 				LL_SPI_TransmitData8(SD_EMUL_SPI, (rest_of_R7 >> 0));
@@ -332,8 +340,26 @@ void SPI2_IRQHandler(void)
 				break;
 			}
 
-			case ACMD(41): {
+			case CMD(1): //CMD1: SEND_OP_COND. Not sure what the difference is between this and ACMD41. CMD1 is seemingly not used by AudioMoth.
+			case ACMD(41): { //ACMD41: SD_SEND_OP_COND. The host sends the HCS bit, and this command is also supposed to start the "card"'s init process.
+				if(card_initialized)
+				{
+					R1_status &= ~R1_IDLE_STATE_MSK; //Clear idle bit if the card is initialized.
+				}
+				LL_SPI_TransmitData8(SD_EMUL_SPI, R1_status); //Send R1 response.
+				LL_SPI_ClearFlag_UDR(SD_EMUL_SPI); //Begin transmission.
+				R1_status = (R1_status & R1_IDLE_STATE_MSK); //Clear all error flags when reading them.
 
+				if(command_arg & HCS_BIT_MSK)
+				{
+					HCS = true;
+				}
+				else
+				{
+					HCS = false;
+				}
+
+				break;
 			}
 
 			default: { //Not an implemented/known command
@@ -345,7 +371,7 @@ void SPI2_IRQHandler(void)
 			} //end of switch(command_num)
 
 			//Get ready to receive another command:
-			LL_SPI_SetFIFOThreshold(SD_EMUL_SPI, LL_SPI_FIFO_TH_05DATA); //Set FIFO threshold back to 1,
+			LL_SPI_SetFIFOThreshold(SD_EMUL_SPI, LL_SPI_FIFO_TH_01DATA); //Set FIFO threshold back to 1,
 			state = awaiting_cmd; //State is once more awaiting_cmd
 			break;
 		}
