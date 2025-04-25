@@ -16,7 +16,7 @@ volatile bool card_initialized = false; //Variable to keep track of if the devic
 volatile uint8_t R1_status = R1_IDLE_STATE_MSK; //This is the variable containing the status bits of the R1 response. Initialized to no errors, and in idle state.
 
 volatile uint32_t OCR = (OCR_CCS_MSK | OCR_POWERUP_STATUS_MSK | OCR_STATIC_PARAMS); //The operation conditions register stores the "card"'s accepted voltage range, and some other info.
-
+																					//TODO: figure out if it's any point supporting cards less than 2GB (CCS bit will in that case not be set.)
 volatile bool HCS = false;
 
 //Function declarations:
@@ -32,8 +32,7 @@ void SD_emulation_init()
 	LL_DMA_EnableIT_TC(SPI_RX_DMA_INSTANCE, SPI_RX_DMA_STREAM_NUM);
 
 	//Setup interrupt-based command reception:
-	LL_SPI_SetFIFOThreshold(SD_EMUL_SPI, LL_SPI_FIFO_TH_01DATA); //Handle one byte at a time while waiting for command.
-	LL_SPI_SetTransferSize(SD_EMUL_SPI, 0); //Transfer length unknown.
+	LL_SPI_SetTransferSize(SD_EMUL_SPI, 0); //Transfer length unknown/indefinite.
 	LL_SPI_EnableIT_RXP(SD_EMUL_SPI); //Enable "packet received" interrupt
 	//LL_SPI_EnableIT_UDR(SD_EMUL_SPI); //Enable TX FIFO underrun interrupt
 

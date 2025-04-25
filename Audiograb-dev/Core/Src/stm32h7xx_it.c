@@ -245,6 +245,8 @@ void SPI2_IRQHandler(void)
 	static uint32_t command_arg;
 	static uint8_t command_CRC;
 
+	static unsigned int command_arg_index;
+
 	enum SD_emulator_state {
 		awaiting_cmd, receiving_cmd_arg, error
 	};
@@ -252,36 +254,54 @@ void SPI2_IRQHandler(void)
 
 	while(LL_SPI_IsActiveFlag_RXP(SD_EMUL_SPI)) //Repeat as long as there are packets to be read from rx FIFO:
 	{
+		int bytes_left_of_packet = 4; //Track amount of bytes left in packet.
+
 		switch(state) {
 		case awaiting_cmd: {
-			//HAL_GPIO_TogglePin(USER_LED2_GPIO_Port, USER_LED2_Pin); //Toggle LED for debugging.
 
-			uint8_t received_data = LL_SPI_ReceiveData8(SD_EMUL_SPI); //Get one byte from RX FIFO
-			if((received_data & SD_START_BITS_MASK) == SD_VALID_START_PATTERN) //If start-of-command pattern detected:
+			command_arg_index = 0; //Reset index when start-of-command hasn't been detected
+
+			for(; bytes_left_of_packet > 0; --bytes_left_of_packet) //Check for start byte as long as there are bytes left in current packet:
 			{
-				LL_SPI_SetFIFOThreshold(SD_EMUL_SPI, LL_SPI_FIFO_TH_05DATA); //Set FIFO threshold to 5, so that the interrupt won't fire again until the rest of the command is received.
-
-				state = receiving_cmd_arg;
-				command_num = (received_data & ~SD_START_BITS_MASK) | (cmd_is_ACMD << 7); //Mask out start bits, and add ACMD indication if applicable.
-				cmd_is_ACMD = false; //Reset ACMD bool in preparation for next reception.
+				uint8_t received_data = LL_SPI_ReceiveData8(SD_EMUL_SPI); //Get one byte from RX FIFO
+				if((received_data & SD_START_BITS_MASK) == SD_VALID_START_PATTERN) //If start-of-command pattern detected:
+				{
+					state = receiving_cmd_arg;
+					command_num = (received_data & ~SD_START_BITS_MASK) | (cmd_is_ACMD << 7); //Mask out start bits, and add ACMD indication if applicable.
+					cmd_is_ACMD = false; //Reset ACMD bool in preparation for next reception.
+					command_arg = 0;
+					command_arg_index = 0;
+					break;
+				}
 			}
-			for(int i = 0; i < 30; ++i) //Delay i*3-ish cycles (see disassembly for accurate number). This is to ensure that enough time
-			{							//passes for the RXP flag to reset after changing FIFO threshold. The minimum value at 144MHz F_CPU seems to be 90.
-				__NOP();				//TODO: make a more robust solution to this problem.
-			}
-			break;
 			}
 
-		case receiving_cmd_arg: { //When the unit is finished receiving the command arguments and CRC:
+		case receiving_cmd_arg: {
+			for(; bytes_left_of_packet > 0; --bytes_left_of_packet) //As long as there are bytes left in current packet:
+			{
+				uint8_t received_data = LL_SPI_ReceiveData8(SD_EMUL_SPI); //Get one byte from RX FIFO
+				if(command_arg_index <= 3)
+				{
+					command_arg |= (received_data << (8 * (3 - command_arg_index)));
+					++command_arg_index; //increment index
+				}
+				else
+				{
+					command_CRC = received_data;
+					++command_arg_index;
+					break;
+				}
+			}
+			if(command_arg_index < 5) //If the whole command hasn't been read:
+			{
+				break; //Prevent commands from being handled before the entire command has been received
+			}
+			else
+			{
+				LL_SPI_ReceiveData32(SD_EMUL_SPI); //Throw away any bytes that have come after the end of command but before answer.
+				LL_SPI_ReceiveData32(SD_EMUL_SPI);
+			}
 
-			command_arg = (LL_SPI_ReceiveData8(SD_EMUL_SPI) << 24); //Retrieve command argument from RX FIFO
-			command_arg |= (LL_SPI_ReceiveData8(SD_EMUL_SPI) << 16); //This is done using receive8 instead of 32 to make it little-endian
-			command_arg |= (LL_SPI_ReceiveData8(SD_EMUL_SPI) << 8);
-			command_arg |= (LL_SPI_ReceiveData8(SD_EMUL_SPI) << 0);
-			command_CRC = LL_SPI_ReceiveData8(SD_EMUL_SPI); //Do the same with the last byte of the command
-
-			LL_SPI_ReceiveData32(SD_EMUL_SPI); //Throw away any bytes that have come after the end of command but before answer.
-			LL_SPI_ReceiveData32(SD_EMUL_SPI);
 
 			switch(command_num) {
 
@@ -382,7 +402,6 @@ void SPI2_IRQHandler(void)
 			} //end of switch(command_num)
 
 			//Get ready to receive another command:
-			LL_SPI_SetFIFOThreshold(SD_EMUL_SPI, LL_SPI_FIFO_TH_01DATA); //Set FIFO threshold back to 1,
 			state = awaiting_cmd; //State is once more awaiting_cmd
 			break;
 		}
