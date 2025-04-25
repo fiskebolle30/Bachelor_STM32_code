@@ -362,6 +362,17 @@ void SPI2_IRQHandler(void)
 				break;
 			}
 
+			case CMD(58): { //CMD58: SEND_OCR.
+
+				LL_SPI_TransmitData8(SD_EMUL_SPI, R1_status);
+				LL_SPI_TransmitData8(SD_EMUL_SPI, (OCR >> 24)); //Transmit OCR big-endian-ly.
+				LL_SPI_TransmitData8(SD_EMUL_SPI, (OCR >> 16));
+				LL_SPI_TransmitData8(SD_EMUL_SPI, (OCR >> 8));
+				LL_SPI_TransmitData8(SD_EMUL_SPI, (OCR >> 0));
+				LL_SPI_ClearFlag_UDR(SD_EMUL_SPI);
+				break;
+			}
+
 			default: { //Not an implemented/known command
 				R1_status |= R1_ILLEGAL_CMD_MSK; //Set the illegal command bit in R1
 				LL_SPI_TransmitData8(SD_EMUL_SPI, R1_status); //Send R1 response.
