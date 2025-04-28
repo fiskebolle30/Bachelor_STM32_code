@@ -254,16 +254,17 @@ void SPI2_IRQHandler(void)
 
 	while(LL_SPI_IsActiveFlag_RXP(SD_EMUL_SPI)) //Repeat as long as there are packets to be read from rx FIFO:
 	{
-		int bytes_left_of_packet = 4; //Track amount of bytes left in packet.
+		uint32_t received_packet = LL_SPI_ReceiveData32(SD_EMUL_SPI); //Receive 4 bytes. Note that this is little-endian, since the smallest byte was received first.
+		int packet_index = 0; //Track amount of bytes not handled in packet.
 
 		switch(state) {
 		case awaiting_cmd: {
 
 			command_arg_index = 0; //Reset index when start-of-command hasn't been detected
 
-			for(; bytes_left_of_packet > 0; --bytes_left_of_packet) //Check for start byte as long as there are bytes left in current packet:
+			for(; packet_index < 4; ++packet_index) //Check for start byte as long as there are bytes left in current packet:
 			{
-				uint8_t received_data = LL_SPI_ReceiveData8(SD_EMUL_SPI); //Get one byte from RX FIFO
+				uint8_t received_data = (received_packet >> (8 * packet_index)); //Get one byte from RX FIFO
 				if((received_data & SD_START_BITS_MASK) == SD_VALID_START_PATTERN) //If start-of-command pattern detected:
 				{
 					state = receiving_cmd_arg;
@@ -271,15 +272,21 @@ void SPI2_IRQHandler(void)
 					cmd_is_ACMD = false; //Reset ACMD bool in preparation for next reception.
 					command_arg = 0;
 					command_arg_index = 0;
-					break;
+					++packet_index; //Increment index because the for loop won't after the break statement.
+					break; //break out of for loop, continue to next case
 				}
+			}
+			if(state == awaiting_cmd) //If the state is still awaiting_cmd:
+			{
+				break; //Don't go into the receiving_cmd_arg case.
 			}
 			}
 
 		case receiving_cmd_arg: {
-			for(; bytes_left_of_packet > 0; --bytes_left_of_packet) //As long as there are bytes left in current packet:
+
+			for(; packet_index < 4; ++packet_index) //As long as there are bytes left in current packet:
 			{
-				uint8_t received_data = LL_SPI_ReceiveData8(SD_EMUL_SPI); //Get one byte from RX FIFO
+				uint8_t received_data = (received_packet >> (8 * packet_index)); //Get one byte from RX FIFO
 				if(command_arg_index <= 3)
 				{
 					command_arg |= (received_data << (8 * (3 - command_arg_index)));
@@ -289,6 +296,7 @@ void SPI2_IRQHandler(void)
 				{
 					command_CRC = received_data;
 					++command_arg_index;
+					++packet_index; //Increment index because the for loop won't after the break statement.
 					break;
 				}
 			}
@@ -296,12 +304,10 @@ void SPI2_IRQHandler(void)
 			{
 				break; //Prevent commands from being handled before the entire command has been received
 			}
-			else
-			{
-				LL_SPI_ReceiveData32(SD_EMUL_SPI); //Throw away any bytes that have come after the end of command but before answer.
-				LL_SPI_ReceiveData32(SD_EMUL_SPI);
-			}
 
+
+			LL_SPI_ReceiveData32(SD_EMUL_SPI); //Throw away any bytes that have come after the end of command but before answer.
+			LL_SPI_ReceiveData32(SD_EMUL_SPI);
 
 			switch(command_num) {
 
@@ -313,7 +319,6 @@ void SPI2_IRQHandler(void)
 				{
 					R1_status |= R1_COM_CRC_ERR_MSK; //set CRC error bit in R1 response.
 				}
-
 				LL_SPI_TransmitData8(SD_EMUL_SPI, R1_status); //Send R1 response.
 				LL_SPI_ClearFlag_UDR(SD_EMUL_SPI); //Clear UDR flag to send response.
 
@@ -395,6 +400,12 @@ void SPI2_IRQHandler(void)
 
 			default: { //Not an implemented/known command
 				R1_status |= R1_ILLEGAL_CMD_MSK; //Set the illegal command bit in R1
+				/*LL_SPI_TransmitData8(SD_EMUL_SPI, command_num); //DEBUG
+				LL_SPI_TransmitData8(SD_EMUL_SPI, (command_arg >> 24)); //Send word big-endian, so that the order the bytes appear in on the bus (and in the simplified spec document)
+				LL_SPI_TransmitData8(SD_EMUL_SPI, (command_arg >> 16)); //are the same as the way they are organized in memory.
+				LL_SPI_TransmitData8(SD_EMUL_SPI, (command_arg >> 8));  //(TransmitData32 is little-endian by necessity).
+				LL_SPI_TransmitData8(SD_EMUL_SPI, (command_arg >> 0));
+				LL_SPI_TransmitData16(SD_EMUL_SPI, command_CRC);*/
 				LL_SPI_TransmitData8(SD_EMUL_SPI, R1_status); //Send R1 response.
 				LL_SPI_ClearFlag_UDR(SD_EMUL_SPI); //Clear UDR flag to send response.
 				R1_status = (R1_status & R1_IDLE_STATE_MSK); //Clear all error flags when the host reads them.
