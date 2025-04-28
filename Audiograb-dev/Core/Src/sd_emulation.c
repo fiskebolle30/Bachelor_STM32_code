@@ -6,6 +6,8 @@
  */
 #include "sd_emulation.h"
 
+#include "sdmmc.h"
+
 //Private function prototypes:
 void SPI_TX_RX_complete_callback(/*SPI_HandleTypeDef *hspi*/);
 void SD_command_handler(uint8_t num, uint32_t arg, uint8_t crc);
@@ -39,6 +41,11 @@ void SD_emulation_init()
 	//Start reception of SPI. This is continual, and all of the "action" happens in the SPI interrupt callbacks. Dummy bytes are provided by the underrun system.
 	LL_SPI_Enable(SD_EMUL_SPI);
 	LL_SPI_TransmitData8(SD_EMUL_SPI, 0xFF); //Underrun system starts at the second byte, so we provide the first one.
+
+	//init SD card
+	while(HAL_GPIO_ReadPin(uSD_Detect_GPIO_Port, uSD_Detect_Pin) == GPIO_PIN_SET) {;} //Wait until SD card detected
+	MX_SDMMC1_SD_Init();
+	card_initialized = true; //The card's been initialized if the code has managed to get this far.
 }
 
 

@@ -95,6 +95,7 @@ int main(void)
   HAL_GPIO_WritePin(USER_LED2_GPIO_Port, USER_LED2_Pin, GPIO_PIN_SET); //Turn off blue LED
   HAL_Delay(200);
   HAL_GPIO_WritePin(USER_LED1_GPIO_Port, USER_LED1_Pin, GPIO_PIN_SET);
+
   SD_emulation_init(); //Init SPI and SD card emulation.
 
   /* USER CODE END 2 */
