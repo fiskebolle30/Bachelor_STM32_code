@@ -9,7 +9,7 @@
 #include "sdmmc.h"
 
 //Private function prototypes:
-void SPI_TX_RX_complete_callback(/*SPI_HandleTypeDef *hspi*/);
+void SD_card_RX_complete_callback(SD_HandleTypeDef hsd);
 void SD_command_handler(uint8_t num, uint32_t arg, uint8_t crc);
 
 //Global variable initializations
@@ -21,6 +21,8 @@ volatile uint32_t OCR = (OCR_CCS_MSK | OCR_POWERUP_STATUS_MSK | OCR_STATIC_PARAM
 																					//TODO: figure out if it's any point supporting cards less than 2GB (CCS bit will in that case not be set.)
 volatile bool HCS = false;
 
+volatile bool SD_card_DMA_read_completed = false;
+
 //Function declarations:
 void SD_emulation_init()
 {
@@ -30,13 +32,12 @@ void SD_emulation_init()
 	LL_SPI_SetUDRDetection(SD_EMUL_SPI, LL_SPI_UDR_DETECT_END_DATA_FRAME); //register underrun immediately when the TX FIFO is empty.
 	LL_SPI_EnableIOLock(SD_EMUL_SPI); //The SPI IO settings shouldn't change ever anyways (I think lol).
 
-	//Configure DMA interrupts. The implementation is driven by the RX DMA interrupt.
-	LL_DMA_EnableIT_TC(SPI_RX_DMA_INSTANCE, SPI_RX_DMA_STREAM_NUM);
+	//Configure DMA interrupts.
+	LL_DMA_EnableIT_TC(SPI_TX_DMA_INSTANCE, SPI_TX_DMA_STREAM_NUM); //Enable DMA SPI TX interrupt
 
 	//Setup interrupt-based command reception:
 	LL_SPI_SetTransferSize(SD_EMUL_SPI, 0); //Transfer length unknown/indefinite.
 	LL_SPI_EnableIT_RXP(SD_EMUL_SPI); //Enable "packet received" interrupt
-	//LL_SPI_EnableIT_UDR(SD_EMUL_SPI); //Enable TX FIFO underrun interrupt
 
 	//Start reception of SPI. This is continual, and all of the "action" happens in the SPI interrupt callbacks. Dummy bytes are provided by the underrun system.
 	LL_SPI_Enable(SD_EMUL_SPI);
@@ -44,12 +45,20 @@ void SD_emulation_init()
 
 	//init SD card
 	while(HAL_GPIO_ReadPin(uSD_Detect_GPIO_Port, uSD_Detect_Pin) == GPIO_PIN_SET) {;} //Wait until SD card detected
+	HAL_SD_RegisterCallback(&hsd1, HAL_SD_RX_CPLT_CB_ID, SD_card_RX_complete_callback);
+	//TODO: register+handle error callback.
 	MX_SDMMC1_SD_Init();
 	card_initialized = true; //The card's been initialized if the code has managed to get this far.
 }
 
 
-void transfer_SPI_DMA(uint8_t *txbuf, uint8_t *rxbuf, unsigned int trans_len) //Kind of unfinished, something something surprise tool that will help us later
+void SD_card_RX_complete_callback(SD_HandleTypeDef hsd) //NBNB this is for the actual SD card, not the SD emulator!
+{
+	SD_card_DMA_read_completed = true;
+}
+
+
+void transfer_SPI_DMA(uint8_t *p_txbuf, uint8_t *p_rxbuf, unsigned int trans_len) //Will need to be stopped when finished.
 {
 	//Start DMA transfer in accordance to the "cookbook recipe" at ref. manual section 55.4.14.
 	LL_SPI_EnableDMAReq_RX(SD_EMUL_SPI);
@@ -64,8 +73,8 @@ void transfer_SPI_DMA(uint8_t *txbuf, uint8_t *rxbuf, unsigned int trans_len) //
 	//Set addresses to transfer data from and to.
 	LL_DMA_SetPeriphAddress(SPI_RX_DMA_INSTANCE, SPI_RX_DMA_STREAM_NUM, (uint32_t)SD_EMUL_SPI); //Peripheral address should never change, so this line may be unnecessary.
 	LL_DMA_SetPeriphAddress(SPI_TX_DMA_INSTANCE, SPI_TX_DMA_STREAM_NUM, (uint32_t)SD_EMUL_SPI); //Cast pointers into uint32_t to write it to DMA register
-	LL_DMA_SetMemoryAddress(SPI_RX_DMA_INSTANCE, SPI_RX_DMA_STREAM_NUM, (uint32_t)rxbuf);
-	LL_DMA_SetMemoryAddress(SPI_TX_DMA_INSTANCE, SPI_TX_DMA_STREAM_NUM, (uint32_t)txbuf);
+	LL_DMA_SetMemoryAddress(SPI_RX_DMA_INSTANCE, SPI_RX_DMA_STREAM_NUM, (uint32_t)p_rxbuf);
+	LL_DMA_SetMemoryAddress(SPI_TX_DMA_INSTANCE, SPI_TX_DMA_STREAM_NUM, (uint32_t)p_txbuf);
 
 	LL_DMA_SetDataLength(SPI_TX_DMA_INSTANCE, SPI_TX_DMA_STREAM_NUM, trans_len);
 	LL_DMA_SetDataLength(SPI_RX_DMA_INSTANCE, SPI_RX_DMA_STREAM_NUM, trans_len);
@@ -73,5 +82,5 @@ void transfer_SPI_DMA(uint8_t *txbuf, uint8_t *rxbuf, unsigned int trans_len) //
 	LL_DMA_EnableStream(SPI_RX_DMA_INSTANCE, SPI_RX_DMA_STREAM_NUM);
 	LL_DMA_EnableStream(SPI_TX_DMA_INSTANCE, SPI_TX_DMA_STREAM_NUM);
 
-	LL_SPI_Enable(SD_EMUL_SPI);
+	LL_SPI_EnableDMAReq_TX(SD_EMUL_SPI);
 }

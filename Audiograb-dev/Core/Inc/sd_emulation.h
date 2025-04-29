@@ -26,10 +26,12 @@
 
 #define SD_START_BITS_MASK 0b11000000 //start bit + transmission bit
 #define SD_VALID_START_PATTERN 0b01000000 //start bit 0, transmision bit 1
-#define SD_ACMD_BITMASK 0b10000000
+#define SD_ACMD_BITMASK 0b10000000 //This bit being set in command_num indicates an ACMD. This is also done by the AudioMoth in its code (specifically microsd.c, line 348)
+#define SD_BLOCK_START_TOKEN 0xFE //This token indicates that the following bytes on the bus are actual data from the SD card.
+#define SD_BLOCK_LENGTH 512 //512 bytes in a block, assuming SDHC or greater or whatever
 
 #define CMD(cmd_num) (cmd_num) //can't be bothered to write all of them lol
-#define ACMD(cmd_num) (cmd_num | SD_ACMD_BITMASK)
+#define ACMD(cmd_num) (cmd_num | SD_ACMD_BITMASK) //Internally in this project, an ACMD is indicated by the most significant bit being set in the command number.
 
 //Definitions for CMD0
 #define CMD0_CRC 0x94 //Valid CRC value of CMD0, according to https://rjhcoding.com/avrc-sd-interface-1.php. This matches with observations from a real SD card transaction.
@@ -66,6 +68,8 @@ extern volatile uint32_t OCR; //The operation conditions register stores the "ca
 
 extern volatile bool HCS; //The Host Capacity Support bit indicates if the host supports high capacity SD cards (SDHC & SDUC).
 #define HCS_BIT_MSK (1 << 30) //The HCS is located in bit 30 of the command argument for ACMD41 and CMD1.
+
+extern volatile bool SD_card_DMA_read_completed; //flag to indicate that one block has been read by the SD card, and that the buffer is now valid
 
 
 //Public functions

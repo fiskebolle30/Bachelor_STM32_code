@@ -23,6 +23,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "sd_emulation.h"
+#include "sdmmc.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -205,7 +206,7 @@ void SysTick_Handler(void)
 void DMA1_Stream0_IRQHandler(void)
 {
   /* USER CODE BEGIN DMA1_Stream0_IRQn 0 */
-	HAL_GPIO_TogglePin(USER_LED1_GPIO_Port, USER_LED1_Pin);
+	//This is the SD emulator SPI RX stream
 
   /* USER CODE END DMA1_Stream0_IRQn 0 */
   /* USER CODE BEGIN DMA1_Stream0_IRQn 1 */
@@ -219,7 +220,17 @@ void DMA1_Stream0_IRQHandler(void)
 void DMA1_Stream1_IRQHandler(void)
 {
   /* USER CODE BEGIN DMA1_Stream1_IRQn 0 */
+	//This is the SD emulator SPI TX stream
 
+	//When the CMD handled is CMD17: (In that case a block has been successfully transmitted, and control should be handed back to the RXP interrupt routine.
+	LL_SPI_TransmitData16(SD_EMUL_SPI, 0xFFFF); //Add two dummy bytes, this should ideally be CRC but the AudioMoth doesn't care. (TODO: actually implement CRC)
+
+	//Disable DMA. Kind-of following cookbook at manual (RM0455) page 2100.
+	LL_DMA_DisableStream(SPI_RX_DMA_INSTANCE, SPI_RX_DMA_STREAM_NUM);
+	LL_DMA_DisableStream(SPI_TX_DMA_INSTANCE, SPI_TX_DMA_STREAM_NUM);
+
+	LL_DMA_ClearFlag_TC1(SPI_TX_DMA_INSTANCE); //Clear transfer complete interrupt flag, so that this interrupt doesn't repeat forever.
+	LL_SPI_EnableIT_RXP(SD_EMUL_SPI); //Re-enable RXP interrupt, the control is handed from the DMA back to interrupts.
   /* USER CODE END DMA1_Stream1_IRQn 0 */
   /* USER CODE BEGIN DMA1_Stream1_IRQn 1 */
 
@@ -247,8 +258,11 @@ void SPI2_IRQHandler(void)
 
 	static unsigned int command_arg_index;
 
+	static uint8_t data_block[512]; //data block for reading from SD card. Kind of loosely defined and liable to change, will be further specified when implementing write. (TODO)
+	static uint8_t dummy_block[512]; //dummy block to write all the 0xFFs received when transmitting a block
+
 	enum SD_emulator_state {
-		awaiting_cmd, receiving_cmd_arg, error
+		awaiting_cmd, receiving_cmd_arg, waiting_for_SD_read_DMA, error
 	};
 	static enum SD_emulator_state state = awaiting_cmd;
 
@@ -398,8 +412,30 @@ void SPI2_IRQHandler(void)
 				break;
 			}
 
+			case CMD(17): { //CMD17: Read single block.
+
+				if(card_initialized == false) //Not sure if this can ever be the case if the host has "gotten this far"
+				{
+					R1_status |= R1_ILLEGAL_CMD_MSK; //Set the illegal command bit in R1.
+					LL_SPI_TransmitData8(SD_EMUL_SPI, R1_status); //Send R1 response.
+					LL_SPI_ClearFlag_UDR(SD_EMUL_SPI); //Clear UDR flag to send response.
+					R1_status = (R1_status & R1_IDLE_STATE_MSK); //Clear all error flags when the host reads them.
+					break;
+				}
+
+				LL_SPI_TransmitData8(SD_EMUL_SPI, R1_status); //Send R1 response.
+				LL_SPI_ClearFlag_UDR(SD_EMUL_SPI); //Clear UDR flag to send response.
+				R1_status = (R1_status & R1_IDLE_STATE_MSK); //Clear all error flags when the host reads them.
+
+				uint32_t block_number = command_arg; //block number/address is given in the argument
+
+				HAL_SD_ReadBlocks_DMA(&hsd1, data_block, block_number, 1);
+				state = waiting_for_SD_read_DMA;
+				break;
+			}
+
 			default: { //Not an implemented/known command
-				R1_status |= R1_ILLEGAL_CMD_MSK; //Set the illegal command bit in R1
+				R1_status |= R1_ILLEGAL_CMD_MSK; //Set the illegal command bit in R1.
 				/*LL_SPI_TransmitData8(SD_EMUL_SPI, command_num); //DEBUG
 				LL_SPI_TransmitData8(SD_EMUL_SPI, (command_arg >> 24)); //Send word big-endian, so that the order the bytes appear in on the bus (and in the simplified spec document)
 				LL_SPI_TransmitData8(SD_EMUL_SPI, (command_arg >> 16)); //are the same as the way they are organized in memory.
@@ -416,8 +452,26 @@ void SPI2_IRQHandler(void)
 			state = awaiting_cmd; //State is once more awaiting_cmd
 			break;
 		}
+		case waiting_for_SD_read_DMA: {
+			//Don't do anything with received data, it's only 0xFF anyways. TODO: sleep + make DMA automatically put received bytes in a trash register or something
+			if(SD_card_DMA_read_completed)
+			{
+				//Add block start token to TX FIFO, then make DMA send the whole block
+				LL_SPI_TransmitData8(SD_EMUL_SPI, SD_BLOCK_START_TOKEN);
+				transfer_SPI_DMA(data_block, dummy_block, SD_BLOCK_LENGTH);
+
+				LL_SPI_ClearFlag_UDR(SD_EMUL_SPI); //Clear UDR flag to start transmission.
+
+				LL_SPI_DisableIT_RXP(SD_EMUL_SPI); //Disable RXP interrupt, for the DMA to take over.
+				SD_card_DMA_read_completed = false; //reset flag
+			}
+			break;
+		}
 		default: {
 			//Should probably throw an error here if the state isn't a known state
+			LL_SPI_TransmitData32(SD_EMUL_SPI, 0x0BBB3E12); //will print 123EBB0B on SPI bus
+			LL_SPI_ClearFlag_UDR(SD_EMUL_SPI); //Clear UDR flag to send response.
+			Error_Handler();
 		}
 		} //end of switch(state)
 	}
