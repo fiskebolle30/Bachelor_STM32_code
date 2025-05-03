@@ -14,9 +14,9 @@
 
 
 //Defines
-#define SD_EMUL_SPI SPI2 //SD emulator SPI instance
-#define SPI_RX_DMA_INSTANCE DMA1
-#define SPI_RX_DMA_STREAM_NUM 0
+#define SD_EMUL_SPI SPI2 //SPI hardware instance used by the SD emulator
+#define SPI_RX_DMA_INSTANCE DMA1 //DMA hardware instance used by SD emulator (when DMA is in use)
+#define SPI_RX_DMA_STREAM_NUM 0 //DMA stream number used for SPI RX when DMA is in use
 #define SPI_TX_DMA_INSTANCE DMA1
 #define SPI_TX_DMA_STREAM_NUM 1
 
@@ -75,5 +75,6 @@ extern volatile bool SD_card_DMA_read_completed; //flag to indicate that one blo
 //Public functions
 void SD_emulation_init();
 
+void transfer_SPI_DMA(uint8_t *p_txbuf, uint8_t *p_rxbuf, unsigned int trans_len);
 
 #endif /* INC_SD_EMULATION_H_ */

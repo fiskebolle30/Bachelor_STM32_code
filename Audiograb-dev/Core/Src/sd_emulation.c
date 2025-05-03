@@ -9,7 +9,7 @@
 #include "sdmmc.h"
 
 //Private function prototypes:
-void SD_card_RX_complete_callback(SD_HandleTypeDef hsd);
+void SD_card_RX_complete_callback(SD_HandleTypeDef *hsd);
 void SD_command_handler(uint8_t num, uint32_t arg, uint8_t crc);
 
 //Global variable initializations
@@ -45,15 +45,16 @@ void SD_emulation_init()
 
 	//init SD card
 	while(HAL_GPIO_ReadPin(uSD_Detect_GPIO_Port, uSD_Detect_Pin) == GPIO_PIN_SET) {;} //Wait until SD card detected
+	MX_SDMMC1_SD_Init();
 	HAL_SD_RegisterCallback(&hsd1, HAL_SD_RX_CPLT_CB_ID, SD_card_RX_complete_callback);
 	//TODO: register+handle error callback.
-	MX_SDMMC1_SD_Init();
 	card_initialized = true; //The card's been initialized if the code has managed to get this far.
 }
 
 
-void SD_card_RX_complete_callback(SD_HandleTypeDef hsd) //NBNB this is for the actual SD card, not the SD emulator!
+void SD_card_RX_complete_callback(SD_HandleTypeDef *hsd) //NBNB this is for the actual SD card, not the SD emulator!
 {
+	HAL_GPIO_WritePin(USER_LED1_GPIO_Port, USER_LED1_Pin, GPIO_PIN_RESET); //debug
 	SD_card_DMA_read_completed = true;
 }
 

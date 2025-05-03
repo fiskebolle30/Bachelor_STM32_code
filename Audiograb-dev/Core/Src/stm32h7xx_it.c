@@ -57,7 +57,7 @@
 /* USER CODE END 0 */
 
 /* External variables --------------------------------------------------------*/
-
+extern SD_HandleTypeDef hsd1;
 /* USER CODE BEGIN EV */
 
 /* USER CODE END EV */
@@ -266,7 +266,7 @@ void SPI2_IRQHandler(void)
 	};
 	static enum SD_emulator_state state = awaiting_cmd;
 
-	while(LL_SPI_IsActiveFlag_RXP(SD_EMUL_SPI)) //Repeat as long as there are packets to be read from rx FIFO:
+	while(SD_EMUL_SPI->SR & SPI_SR_RXP) //Repeat as long as there are packets to be read from rx FIFO:
 	{
 		uint32_t received_packet = LL_SPI_ReceiveData32(SD_EMUL_SPI); //Receive 4 bytes. Note that this is little-endian, since the smallest byte was received first.
 		int packet_index = 0; //Track amount of bytes not handled in packet.
@@ -319,11 +319,11 @@ void SPI2_IRQHandler(void)
 				break; //Prevent commands from being handled before the entire command has been received
 			}
 
-
 			LL_SPI_ReceiveData32(SD_EMUL_SPI); //Throw away any bytes that have come after the end of command but before answer.
 			LL_SPI_ReceiveData32(SD_EMUL_SPI);
 
-			switch(command_num) {
+
+			switch(command_num) { //This section is where the different commands are handled.
 
 			case CMD(0): { //CMD0: go to idle state.
 
@@ -413,7 +413,7 @@ void SPI2_IRQHandler(void)
 			}
 
 			case CMD(17): { //CMD17: Read single block.
-
+				/* DEBUGDEBUGDEBUG, uncomment when debugging is finished and it hopefully works
 				if(card_initialized == false) //Not sure if this can ever be the case if the host has "gotten this far"
 				{
 					R1_status |= R1_ILLEGAL_CMD_MSK; //Set the illegal command bit in R1.
@@ -421,7 +421,7 @@ void SPI2_IRQHandler(void)
 					LL_SPI_ClearFlag_UDR(SD_EMUL_SPI); //Clear UDR flag to send response.
 					R1_status = (R1_status & R1_IDLE_STATE_MSK); //Clear all error flags when the host reads them.
 					break;
-				}
+				}*/
 
 				LL_SPI_TransmitData8(SD_EMUL_SPI, R1_status); //Send R1 response.
 				LL_SPI_ClearFlag_UDR(SD_EMUL_SPI); //Clear UDR flag to send response.
@@ -429,8 +429,19 @@ void SPI2_IRQHandler(void)
 
 				uint32_t block_number = command_arg; //block number/address is given in the argument
 
-				HAL_SD_ReadBlocks_DMA(&hsd1, data_block, block_number, 1);
+				HAL_SD_ReadBlocks(&hsd1, data_block, block_number, 1, 200);
+
+				volatile HAL_SD_CardStateTypeDef asfj = HAL_SD_GetCardState(&hsd1);
+				data_block[1];
+				while(HAL_SD_GetCardState(&hsd1) != HAL_SD_CARD_TRANSFER);
+
 				state = waiting_for_SD_read_DMA;
+				SD_card_DMA_read_completed = true;
+				LL_SPI_ReceiveData32(SD_EMUL_SPI);
+				LL_SPI_ReceiveData32(SD_EMUL_SPI);
+				LL_SPI_ReceiveData32(SD_EMUL_SPI);
+				LL_SPI_ReceiveData32(SD_EMUL_SPI); //clear RX FIFO
+				LL_SPI_ClearFlag_OVR(SD_EMUL_SPI); //clear OVR flag because that's probably been set at this point
 				break;
 			}
 
@@ -449,18 +460,54 @@ void SPI2_IRQHandler(void)
 			} //end of switch(command_num)
 
 			//Get ready to receive another command:
-			state = awaiting_cmd; //State is once more awaiting_cmd
+			if(state == receiving_cmd_arg) { //If state hasn't been set to something else, then go back to awaiting_cmd
+				state = awaiting_cmd; //State is once more awaiting_cmd
+			}
 			break;
 		}
 		case waiting_for_SD_read_DMA: {
 			//Don't do anything with received data, it's only 0xFF anyways. TODO: sleep + make DMA automatically put received bytes in a trash register or something
+			if(HAL_SD_GetCardState(&hsd1) == HAL_SD_CARD_TRANSFER)
+			{
+				HAL_GPIO_WritePin(USER_LED2_GPIO_Port, USER_LED2_Pin, GPIO_PIN_RESET); //debug
+			}
+
 			if(SD_card_DMA_read_completed)
 			{
 				//Add block start token to TX FIFO, then make DMA send the whole block
 				LL_SPI_TransmitData8(SD_EMUL_SPI, SD_BLOCK_START_TOKEN);
-				transfer_SPI_DMA(data_block, dummy_block, SD_BLOCK_LENGTH);
 
-				LL_SPI_ClearFlag_UDR(SD_EMUL_SPI); //Clear UDR flag to start transmission.
+
+
+
+				//Start DMA transfer in accordance to the "cookbook recipe" at ref. manual section 55.4.14.
+				LL_SPI_EnableDMAReq_RX(SD_EMUL_SPI);
+
+				//Ensure DMA streams are disabled to make changes to them.
+				LL_DMA_DisableStream(SPI_RX_DMA_INSTANCE, SPI_RX_DMA_STREAM_NUM);
+				LL_DMA_DisableStream(SPI_TX_DMA_INSTANCE, SPI_TX_DMA_STREAM_NUM);
+				while (LL_DMA_IsEnabledStream(SPI_RX_DMA_INSTANCE, SPI_RX_DMA_STREAM_NUM)) {;} //wait until stream is disabled
+				while (LL_DMA_IsEnabledStream(SPI_TX_DMA_INSTANCE, SPI_TX_DMA_STREAM_NUM)) {;}
+				SPI_RX_DMA_INSTANCE->LIFCR = DMA_STREAM0_INTERRUPTFLAGS_MASK | DMA_STREAM1_INTERRUPTFLAGS_MASK; //Clear all interrupt flags for channel 0 and 1.
+
+				//Set addresses to transfer data from and to.
+				LL_DMA_SetPeriphAddress(SPI_RX_DMA_INSTANCE, SPI_RX_DMA_STREAM_NUM, (uint32_t)SD_EMUL_SPI); //Peripheral address should never change, so this line may be unnecessary.
+				LL_DMA_SetPeriphAddress(SPI_TX_DMA_INSTANCE, SPI_TX_DMA_STREAM_NUM, (uint32_t)SD_EMUL_SPI); //Cast pointers into uint32_t to write it to DMA register
+				LL_DMA_SetMemoryAddress(SPI_RX_DMA_INSTANCE, SPI_RX_DMA_STREAM_NUM, (uint32_t)dummy_block);
+				LL_DMA_SetMemoryAddress(SPI_TX_DMA_INSTANCE, SPI_TX_DMA_STREAM_NUM, (uint32_t)data_block);
+
+				LL_DMA_SetDataLength(SPI_TX_DMA_INSTANCE, SPI_TX_DMA_STREAM_NUM, trans_len);
+				LL_DMA_SetDataLength(SPI_RX_DMA_INSTANCE, SPI_RX_DMA_STREAM_NUM, trans_len);
+
+				LL_DMA_EnableStream(SPI_RX_DMA_INSTANCE, SPI_RX_DMA_STREAM_NUM);
+				LL_DMA_EnableStream(SPI_TX_DMA_INSTANCE, SPI_TX_DMA_STREAM_NUM);
+
+				LL_SPI_EnableDMAReq_TX(SD_EMUL_SPI);
+
+
+
+
+				//LL_SPI_ClearFlag_UDR(SD_EMUL_SPI); //Clear UDR flag to start transmission.
 
 				LL_SPI_DisableIT_RXP(SD_EMUL_SPI); //Disable RXP interrupt, for the DMA to take over.
 				SD_card_DMA_read_completed = false; //reset flag
@@ -475,16 +522,30 @@ void SPI2_IRQHandler(void)
 		}
 		} //end of switch(state)
 	}
-	/*if(LL_SPI_IsActiveFlag_UDR(SD_EMUL_SPI))
+	if(LL_SPI_IsActiveFlag_OVR(SD_EMUL_SPI))
 	{
 		HAL_GPIO_TogglePin(USER_LED1_GPIO_Port, USER_LED1_Pin); //Ideally this shouldn't happen.
-		LL_SPI_ClearFlag_UDR(SD_EMUL_SPI);
-	}*/
+		LL_SPI_ClearFlag_OVR(SD_EMUL_SPI);
+	}
 
   /* USER CODE END SPI2_IRQn 0 */
   /* USER CODE BEGIN SPI2_IRQn 1 */
 
   /* USER CODE END SPI2_IRQn 1 */
+}
+
+/**
+  * @brief This function handles SDMMC1 global interrupt.
+  */
+void SDMMC1_IRQHandler(void)
+{
+  /* USER CODE BEGIN SDMMC1_IRQn 0 */
+
+  /* USER CODE END SDMMC1_IRQn 0 */
+  HAL_SD_IRQHandler(&hsd1);
+  /* USER CODE BEGIN SDMMC1_IRQn 1 */
+
+  /* USER CODE END SDMMC1_IRQn 1 */
 }
 
 /* USER CODE BEGIN 1 */
