@@ -51,37 +51,8 @@ void SD_emulation_init()
 	card_initialized = true; //The card's been initialized if the code has managed to get this far.
 }
 
-
 void SD_card_RX_complete_callback(SD_HandleTypeDef *hsd) //NBNB this is for the actual SD card, not the SD emulator!
 {
-	HAL_GPIO_WritePin(USER_LED1_GPIO_Port, USER_LED1_Pin, GPIO_PIN_RESET); //debug
-	SD_card_DMA_read_completed = true;
-}
-
-
-void transfer_SPI_DMA(uint8_t *p_txbuf, uint8_t *p_rxbuf, unsigned int trans_len) //Will need to be stopped when finished.
-{
-	//Start DMA transfer in accordance to the "cookbook recipe" at ref. manual section 55.4.14.
-	LL_SPI_EnableDMAReq_RX(SD_EMUL_SPI);
-
-	//Ensure DMA streams are disabled to make changes to them.
-	LL_DMA_DisableStream(SPI_RX_DMA_INSTANCE, SPI_RX_DMA_STREAM_NUM);
-	LL_DMA_DisableStream(SPI_TX_DMA_INSTANCE, SPI_TX_DMA_STREAM_NUM);
-	while (LL_DMA_IsEnabledStream(SPI_RX_DMA_INSTANCE, SPI_RX_DMA_STREAM_NUM)) {;} //wait until stream is disabled
-	while (LL_DMA_IsEnabledStream(SPI_TX_DMA_INSTANCE, SPI_TX_DMA_STREAM_NUM)) {;}
-	SPI_RX_DMA_INSTANCE->LIFCR = DMA_STREAM0_INTERRUPTFLAGS_MASK | DMA_STREAM1_INTERRUPTFLAGS_MASK; //Clear all interrupt flags for channel 0 and 1.
-
-	//Set addresses to transfer data from and to.
-	LL_DMA_SetPeriphAddress(SPI_RX_DMA_INSTANCE, SPI_RX_DMA_STREAM_NUM, (uint32_t)SD_EMUL_SPI); //Peripheral address should never change, so this line may be unnecessary.
-	LL_DMA_SetPeriphAddress(SPI_TX_DMA_INSTANCE, SPI_TX_DMA_STREAM_NUM, (uint32_t)SD_EMUL_SPI); //Cast pointers into uint32_t to write it to DMA register
-	LL_DMA_SetMemoryAddress(SPI_RX_DMA_INSTANCE, SPI_RX_DMA_STREAM_NUM, (uint32_t)p_rxbuf);
-	LL_DMA_SetMemoryAddress(SPI_TX_DMA_INSTANCE, SPI_TX_DMA_STREAM_NUM, (uint32_t)p_txbuf);
-
-	LL_DMA_SetDataLength(SPI_TX_DMA_INSTANCE, SPI_TX_DMA_STREAM_NUM, trans_len);
-	LL_DMA_SetDataLength(SPI_RX_DMA_INSTANCE, SPI_RX_DMA_STREAM_NUM, trans_len);
-
-	LL_DMA_EnableStream(SPI_RX_DMA_INSTANCE, SPI_RX_DMA_STREAM_NUM);
-	LL_DMA_EnableStream(SPI_TX_DMA_INSTANCE, SPI_TX_DMA_STREAM_NUM);
-
-	LL_SPI_EnableDMAReq_TX(SD_EMUL_SPI);
+       HAL_GPIO_WritePin(USER_LED2_GPIO_Port, USER_LED2_Pin, GPIO_PIN_RESET); //debug
+       SD_card_DMA_read_completed = true;
 }

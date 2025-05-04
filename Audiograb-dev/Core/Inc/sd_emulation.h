@@ -75,6 +75,4 @@ extern volatile bool SD_card_DMA_read_completed; //flag to indicate that one blo
 //Public functions
 void SD_emulation_init();
 
-void transfer_SPI_DMA(uint8_t *p_txbuf, uint8_t *p_rxbuf, unsigned int trans_len);
-
 #endif /* INC_SD_EMULATION_H_ */

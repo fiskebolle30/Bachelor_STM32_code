@@ -258,11 +258,11 @@ void SPI2_IRQHandler(void)
 
 	static unsigned int command_arg_index;
 
-	static uint8_t data_block[512]; //data block for reading from SD card. Kind of loosely defined and liable to change, will be further specified when implementing write. (TODO)
-	static uint8_t dummy_block[512]; //dummy block to write all the 0xFFs received when transmitting a block
+	static uint8_t data_block[SD_BLOCK_LENGTH]; //data block for reading from SD card. Kind of loosely defined and liable to change, will be further specified when implementing write. (TODO)
+	static int block_index;
 
 	enum SD_emulator_state {
-		awaiting_cmd, receiving_cmd_arg, waiting_for_SD_read_DMA, error
+		awaiting_cmd, receiving_cmd_arg, waiting_for_SD_read_DMA, transmitting_single_block, error
 	};
 	static enum SD_emulator_state state = awaiting_cmd;
 
@@ -429,19 +429,15 @@ void SPI2_IRQHandler(void)
 
 				uint32_t block_number = command_arg; //block number/address is given in the argument
 
-				HAL_SD_ReadBlocks(&hsd1, data_block, block_number, 1, 200);
-
-				volatile HAL_SD_CardStateTypeDef asfj = HAL_SD_GetCardState(&hsd1);
-				data_block[1];
-				while(HAL_SD_GetCardState(&hsd1) != HAL_SD_CARD_TRANSFER);
+				HAL_StatusTypeDef SD_card_read_status = HAL_SD_ReadBlocks_DMA(&hsd1, data_block, block_number, 1);
+				if(SD_card_read_status == HAL_ERROR)
+				{
+					//TODO: Send error token and move on
+					Error_Handler();
+				}
 
 				state = waiting_for_SD_read_DMA;
-				SD_card_DMA_read_completed = true;
-				LL_SPI_ReceiveData32(SD_EMUL_SPI);
-				LL_SPI_ReceiveData32(SD_EMUL_SPI);
-				LL_SPI_ReceiveData32(SD_EMUL_SPI);
-				LL_SPI_ReceiveData32(SD_EMUL_SPI); //clear RX FIFO
-				LL_SPI_ClearFlag_OVR(SD_EMUL_SPI); //clear OVR flag because that's probably been set at this point
+
 				break;
 			}
 
@@ -465,53 +461,52 @@ void SPI2_IRQHandler(void)
 			}
 			break;
 		}
+
 		case waiting_for_SD_read_DMA: {
+			if(!SD_card_DMA_read_completed)
+			{
+				break; //Don't do anything if the SD card isn't finished.
+			}
+			//Else: (if the SD card has finished reading)
+			state = transmitting_single_block;
+
+			block_index = 0;
+
+			LL_SPI_TransmitData8(SD_EMUL_SPI, SD_BLOCK_START_TOKEN); //Start by sending the block start token.
+
+			LL_SPI_TransmitData8(SD_EMUL_SPI, data_block[block_index++]); //Transmit data from the block, and post-increment block index.
+			LL_SPI_TransmitData8(SD_EMUL_SPI, data_block[block_index++]);
+			LL_SPI_TransmitData8(SD_EMUL_SPI, data_block[block_index++]);
+			LL_SPI_ClearFlag_UDR(SD_EMUL_SPI);
+			//No break, we continue to transmitting_single_block.
+		}
+
+		case transmitting_single_block: {
 			//Don't do anything with received data, it's only 0xFF anyways. TODO: sleep + make DMA automatically put received bytes in a trash register or something
-			if(HAL_SD_GetCardState(&hsd1) == HAL_SD_CARD_TRANSFER)
+			while(SD_EMUL_SPI->SR & SPI_SR_TXP) //While the TXP flag in the SPI status register is set (There is space for another packet in the TX FIFO):
 			{
-				HAL_GPIO_WritePin(USER_LED2_GPIO_Port, USER_LED2_Pin, GPIO_PIN_RESET); //debug
+				LL_SPI_TransmitData8(SD_EMUL_SPI, data_block[block_index++]); //Transmit four bytes of data.
+				LL_SPI_TransmitData8(SD_EMUL_SPI, data_block[block_index++]);
+				LL_SPI_TransmitData8(SD_EMUL_SPI, data_block[block_index++]);
+				LL_SPI_TransmitData8(SD_EMUL_SPI, data_block[block_index++]);
+				if(block_index >= (SD_BLOCK_LENGTH - 4)) //If there are less than four bytes left in the data block:
+				{
+					while(!(SD_EMUL_SPI->SR & SPI_SR_TXP)) {;} //Wait until there is space in the TX FIFO (do nothing while the TXP flag isn't set)
+
+					while(block_index < SD_BLOCK_LENGTH) //Send last data bytes
+					{
+						LL_SPI_TransmitData8(SD_EMUL_SPI, data_block[block_index++]);
+					}
+
+					while(!(SD_EMUL_SPI->SR & SPI_SR_TXP)) {;} //Wait until there is space in the TX FIFO (do nothing while the TXP flag isn't set)
+
+					LL_SPI_TransmitData16(SD_EMUL_SPI, 0x0000); //Send two dummy bytes as "CRC" (potential TODO: actual CRC).
+
+					state = awaiting_cmd; //Data transfer finished.
+					break;
+				}
 			}
 
-			if(SD_card_DMA_read_completed)
-			{
-				//Add block start token to TX FIFO, then make DMA send the whole block
-				LL_SPI_TransmitData8(SD_EMUL_SPI, SD_BLOCK_START_TOKEN);
-
-
-
-
-				//Start DMA transfer in accordance to the "cookbook recipe" at ref. manual section 55.4.14.
-				LL_SPI_EnableDMAReq_RX(SD_EMUL_SPI);
-
-				//Ensure DMA streams are disabled to make changes to them.
-				LL_DMA_DisableStream(SPI_RX_DMA_INSTANCE, SPI_RX_DMA_STREAM_NUM);
-				LL_DMA_DisableStream(SPI_TX_DMA_INSTANCE, SPI_TX_DMA_STREAM_NUM);
-				while (LL_DMA_IsEnabledStream(SPI_RX_DMA_INSTANCE, SPI_RX_DMA_STREAM_NUM)) {;} //wait until stream is disabled
-				while (LL_DMA_IsEnabledStream(SPI_TX_DMA_INSTANCE, SPI_TX_DMA_STREAM_NUM)) {;}
-				SPI_RX_DMA_INSTANCE->LIFCR = DMA_STREAM0_INTERRUPTFLAGS_MASK | DMA_STREAM1_INTERRUPTFLAGS_MASK; //Clear all interrupt flags for channel 0 and 1.
-
-				//Set addresses to transfer data from and to.
-				LL_DMA_SetPeriphAddress(SPI_RX_DMA_INSTANCE, SPI_RX_DMA_STREAM_NUM, (uint32_t)SD_EMUL_SPI); //Peripheral address should never change, so this line may be unnecessary.
-				LL_DMA_SetPeriphAddress(SPI_TX_DMA_INSTANCE, SPI_TX_DMA_STREAM_NUM, (uint32_t)SD_EMUL_SPI); //Cast pointers into uint32_t to write it to DMA register
-				LL_DMA_SetMemoryAddress(SPI_RX_DMA_INSTANCE, SPI_RX_DMA_STREAM_NUM, (uint32_t)dummy_block);
-				LL_DMA_SetMemoryAddress(SPI_TX_DMA_INSTANCE, SPI_TX_DMA_STREAM_NUM, (uint32_t)data_block);
-
-				LL_DMA_SetDataLength(SPI_TX_DMA_INSTANCE, SPI_TX_DMA_STREAM_NUM, trans_len);
-				LL_DMA_SetDataLength(SPI_RX_DMA_INSTANCE, SPI_RX_DMA_STREAM_NUM, trans_len);
-
-				LL_DMA_EnableStream(SPI_RX_DMA_INSTANCE, SPI_RX_DMA_STREAM_NUM);
-				LL_DMA_EnableStream(SPI_TX_DMA_INSTANCE, SPI_TX_DMA_STREAM_NUM);
-
-				LL_SPI_EnableDMAReq_TX(SD_EMUL_SPI);
-
-
-
-
-				//LL_SPI_ClearFlag_UDR(SD_EMUL_SPI); //Clear UDR flag to start transmission.
-
-				LL_SPI_DisableIT_RXP(SD_EMUL_SPI); //Disable RXP interrupt, for the DMA to take over.
-				SD_card_DMA_read_completed = false; //reset flag
-			}
 			break;
 		}
 		default: {

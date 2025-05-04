@@ -214,6 +214,8 @@ void Error_Handler(void)
   __disable_irq();
   while (1)
   {
+	  HAL_Delay(200);
+	  HAL_GPIO_TogglePin(USER_LED1_GPIO_Port, USER_LED1_Pin); //Flash red LED to indicate error
   }
   /* USER CODE END Error_Handler_Debug */
 }
