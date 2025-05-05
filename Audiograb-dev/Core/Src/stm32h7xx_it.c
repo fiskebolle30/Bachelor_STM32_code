@@ -469,7 +469,7 @@ void SPI2_IRQHandler(void)
 			}
 			//Else: (if the SD card has finished reading)
 			state = transmitting_single_block;
-
+			SD_card_DMA_read_completed = false; //Reset read_completed flag
 			block_index = 0;
 
 			LL_SPI_TransmitData8(SD_EMUL_SPI, SD_BLOCK_START_TOKEN); //Start by sending the block start token.
