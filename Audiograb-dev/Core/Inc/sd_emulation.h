@@ -10,6 +10,8 @@
 
 #include "gpio.h"
 #include "spi.h"
+#include "sdmmc.h"
+
 #include <stdbool.h>
 
 
@@ -20,7 +22,7 @@
 #define SPI_TX_DMA_INSTANCE DMA1
 #define SPI_TX_DMA_STREAM_NUM 1
 
-//Masks used to clear all interrupt flags for a DMA stream, while leaving reserved bits.
+//Masks used to clear all interrupt flags for a DMA stream, while leaving reserved bits untouched.
 #define DMA_STREAM0_INTERRUPTFLAGS_MASK (uint32_t)0b01111101
 #define DMA_STREAM1_INTERRUPTFLAGS_MASK (uint32_t)(0b01111101 << 8)
 

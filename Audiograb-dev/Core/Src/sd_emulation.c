@@ -6,8 +6,6 @@
  */
 #include "sd_emulation.h"
 
-#include "sdmmc.h"
-
 //Private function prototypes:
 void SD_card_RX_complete_callback(SD_HandleTypeDef *hsd);
 void SD_command_handler(uint8_t num, uint32_t arg, uint8_t crc);
