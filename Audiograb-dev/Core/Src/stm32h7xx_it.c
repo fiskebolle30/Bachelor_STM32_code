@@ -222,15 +222,6 @@ void DMA1_Stream1_IRQHandler(void)
   /* USER CODE BEGIN DMA1_Stream1_IRQn 0 */
 	//This is the SD emulator SPI TX stream
 
-	//When the CMD handled is CMD17: (In that case a block has been successfully transmitted, and control should be handed back to the RXP interrupt routine.
-	LL_SPI_TransmitData16(SD_EMUL_SPI, 0xFFFF); //Add two dummy bytes, this should ideally be CRC but the AudioMoth doesn't care. (TODO: actually implement CRC)
-
-	//Disable DMA. Kind-of following cookbook at manual (RM0455) page 2100.
-	LL_DMA_DisableStream(SPI_RX_DMA_INSTANCE, SPI_RX_DMA_STREAM_NUM);
-	LL_DMA_DisableStream(SPI_TX_DMA_INSTANCE, SPI_TX_DMA_STREAM_NUM);
-
-	LL_DMA_ClearFlag_TC1(SPI_TX_DMA_INSTANCE); //Clear transfer complete interrupt flag, so that this interrupt doesn't repeat forever.
-	LL_SPI_EnableIT_RXP(SD_EMUL_SPI); //Re-enable RXP interrupt, the control is handed from the DMA back to interrupts.
   /* USER CODE END DMA1_Stream1_IRQn 0 */
   /* USER CODE BEGIN DMA1_Stream1_IRQn 1 */
 
