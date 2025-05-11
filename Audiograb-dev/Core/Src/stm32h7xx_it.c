@@ -344,6 +344,7 @@ void SPI2_IRQHandler(void)
 				}
 
 				LL_SPI_TransmitData8(SD_EMUL_SPI, R1_status); //Send R1 response, which is the start of the R7 response
+				R1_status = (R1_status & R1_IDLE_STATE_MSK); //Clear all error flags when reading them.
 				uint32_t rest_of_R7 = 0;
 				if((command_arg & CMD8_VOLTAGE_ACCEPTED_MSK) == CMD8_2V7_3V6_ACCEPTED) //Only send back voltage accepted field if it's the correct voltage for the "card"
 				{
@@ -430,6 +431,16 @@ void SPI2_IRQHandler(void)
 				state = waiting_for_SD_read_DMA;
 
 				break;
+			}
+
+			case ACMD(23): { //ACMD23: pre-erase blocks before writing to speed up the write process. Refer to p. 54 in the SD simplified spec v. 9.10.
+									// This is an indication of how long the write will be.
+
+				//TODO: Do something with the information provided in this command.
+
+				LL_SPI_TransmitData8(SD_EMUL_SPI, R1_status); //Send R1 response.
+				LL_SPI_ClearFlag_UDR(SD_EMUL_SPI); //Begin transmission.
+				R1_status = (R1_status & R1_IDLE_STATE_MSK); //Clear all error flags when reading them.
 			}
 
 			default: { //Not an implemented/known command
