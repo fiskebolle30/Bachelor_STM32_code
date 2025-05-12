@@ -260,7 +260,7 @@ void SPI2_IRQHandler(void)
 	while(SD_EMUL_SPI->SR & SPI_SR_RXP) //Repeat as long as there are packets to be read from rx FIFO:
 	{
 		uint32_t received_packet = LL_SPI_ReceiveData32(SD_EMUL_SPI); //Receive 4 bytes. Note that this is little-endian, since the smallest byte was received first.
-		int packet_index = 0; //Track amount of bytes not handled in packet.
+		int packet_index = 0; //Track amount of bytes that have been handled in packet.
 
 		switch(state) {
 		case awaiting_cmd: {
