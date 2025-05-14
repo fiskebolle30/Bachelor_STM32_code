@@ -259,7 +259,9 @@ void SPI2_IRQHandler(void)
 
 	while(SD_EMUL_SPI->SR & SPI_SR_RXP) //Repeat as long as there are packets to be read from rx FIFO:
 	{
-		uint32_t received_packet = LL_SPI_ReceiveData32(SD_EMUL_SPI); //Receive 4 bytes. Note that this is little-endian, since the smallest byte was received first.
+		uint32_t received_packet = LL_SPI_ReceiveData32(SD_EMUL_SPI); //Receive 4 bytes. Note that this reverses the byte position compared to the normal representation of data
+																	  //on the bus which has a time axis increasing towards the left, since the first received byte is placed in
+																	  //the least significant (rightmost) byte position in the data register.
 		int packet_index = 0; //Track amount of bytes that have been handled in packet.
 
 		switch(state) {
@@ -269,7 +271,8 @@ void SPI2_IRQHandler(void)
 
 			for(; packet_index < 4; ++packet_index) //Check for start byte as long as there are bytes left in current packet:
 			{
-				uint8_t received_data = (received_packet >> (8 * packet_index)); //Get one byte from RX FIFO
+				uint8_t received_data = (received_packet >> (8 * packet_index)); //Get one byte of the received packet, starting with the least significant (rightmost) byte.
+																				 //This ensures bytes on the bus are handled chronologically.
 				if((received_data & SD_START_BITS_MASK) == SD_VALID_START_PATTERN) //If start-of-command pattern detected:
 				{
 					state = receiving_cmd_arg;
