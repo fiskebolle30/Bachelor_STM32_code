@@ -148,7 +148,7 @@ void MX_SPI2_Init(void)
   SPI_InitStruct.CRCPoly = 0x0;
   LL_SPI_Init(SPI2, &SPI_InitStruct);
   LL_SPI_SetStandard(SPI2, LL_SPI_PROTOCOL_MOTOROLA);
-  LL_SPI_SetFIFOThreshold(SPI2, LL_SPI_FIFO_TH_04DATA);
+  LL_SPI_SetFIFOThreshold(SPI2, LL_SPI_FIFO_TH_01DATA);
   LL_SPI_DisableNSSPulseMgt(SPI2);
   /* USER CODE BEGIN SPI2_Init 2 */
 

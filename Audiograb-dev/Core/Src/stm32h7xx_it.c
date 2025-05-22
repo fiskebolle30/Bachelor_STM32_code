@@ -247,75 +247,52 @@ void SPI2_IRQHandler(void)
 	static uint32_t command_arg;
 	static uint8_t command_CRC;
 
-	static unsigned int command_arg_index;
+	static unsigned int bytes_left_of_command;
 
 	static uint8_t data_block[SD_BLOCK_LENGTH]; //data block for reading from SD card. Kind of loosely defined and liable to change, will be further specified when implementing write. (TODO)
 	static int block_index;
 
 	enum SD_emulator_state {
-		awaiting_cmd, receiving_cmd_arg, waiting_for_SD_read_DMA, transmitting_single_block, error
+		awaiting_cmd, receiving_cmd, waiting_for_SD_read_DMA, transmitting_single_block, error
 	};
 	static enum SD_emulator_state state = awaiting_cmd;
 
 	while(SD_EMUL_SPI->SR & SPI_SR_RXP) //Repeat as long as there are packets to be read from rx FIFO:
 	{
-		uint32_t received_packet = LL_SPI_ReceiveData32(SD_EMUL_SPI); //Receive 4 bytes. Note that this reverses the byte position compared to the normal representation of data
-																	  //on the bus which has a time axis increasing towards the left, since the first received byte is placed in
-																	  //the least significant (rightmost) byte position in the data register.
-		int packet_index = 0; //Track amount of bytes that have been handled in packet.
+		uint8_t received_data = LL_SPI_ReceiveData8(SD_EMUL_SPI); //Get one byte from RX FIFO.
 
 		switch(state) {
 		case awaiting_cmd: {
 
-			command_arg_index = 0; //Reset index when start-of-command hasn't been detected
-
-			for(; packet_index < 4; ++packet_index) //Check for start byte as long as there are bytes left in current packet:
+			if((received_data & SD_START_BITS_MASK) == SD_VALID_START_PATTERN) //If start-of-command pattern detected:
 			{
-				uint8_t received_data = (received_packet >> (8 * packet_index)); //Get one byte of the received packet, starting with the least significant (rightmost) byte.
-																				 //This ensures bytes on the bus are handled chronologically.
-				if((received_data & SD_START_BITS_MASK) == SD_VALID_START_PATTERN) //If start-of-command pattern detected:
-				{
-					state = receiving_cmd_arg;
-					command_num = (received_data & ~SD_START_BITS_MASK) | (cmd_is_ACMD << 7); //Mask out start bits, and add ACMD indication if applicable.
-					cmd_is_ACMD = false; //Reset ACMD bool in preparation for next reception.
-					command_arg = 0;
-					command_arg_index = 0;
-					++packet_index; //Increment index because the for loop won't after the break statement.
-					break; //break out of for loop, continue to next case
-				}
+				state = receiving_cmd;
+				command_num = (received_data & ~SD_START_BITS_MASK) | (cmd_is_ACMD << 7); //Mask out start bits from received byte, and add ACMD indication if applicable, to get command number.
+				cmd_is_ACMD = false; //Reset ACMD bool in preparation for next reception.
+				command_arg = 0; //Reset command arg to prepare the variable for reception.
+				bytes_left_of_command = 5; //One byte has been received, five to go.
 			}
-			if(state == awaiting_cmd) //If the state is still awaiting_cmd:
-			{
-				break; //Don't go into the receiving_cmd_arg case.
-			}
-			}
+			break;
+		}
 
-		case receiving_cmd_arg: {
+		case receiving_cmd: {
 
-			for(; packet_index < 4; ++packet_index) //As long as there are bytes left in current packet:
+			if(bytes_left_of_command > 1) //When received bytes are part of the argument:
 			{
-				uint8_t received_data = (received_packet >> (8 * packet_index)); //Get one byte from RX FIFO
-				if(command_arg_index <= 3)
-				{
-					command_arg |= (received_data << (8 * (3 - command_arg_index)));
-					++command_arg_index; //increment index
-				}
-				else
-				{
-					command_CRC = received_data;
-					++command_arg_index;
-					++packet_index; //Increment index because the for loop won't after the break statement.
-					break;
-				}
-			}
-			if(command_arg_index < 5) //If the whole command hasn't been read:
-			{
-				break; //Prevent commands from being handled before the entire command has been received
-			}
+				command_arg |= (received_data << (8 * (bytes_left_of_command - 2))); //Place received bytes in argument register, shift received bytes between 3 and 0 bytes
+																					 //to the left to aggregate them into a 32-bit variable.
+				--bytes_left_of_command;
 
-			LL_SPI_ReceiveData32(SD_EMUL_SPI); //Throw away any bytes that have come after the end of command but before answer.
+				break; //Break to ensure commands aren't handled until the last byte of the command as been received.
+			}
+			else //If the amount of bytes left of a command is one, then the received byte is the last byte in the command.
+			{
+				command_CRC = received_data;
+			}
+			LL_SPI_ReceiveData32(SD_EMUL_SPI); //Throw away any bytes that have been received after the end of command but before the answer.
 			LL_SPI_ReceiveData32(SD_EMUL_SPI);
 
+			//At this point, a full command has been received.
 
 			switch(command_num) { //This section is where the different commands are handled.
 
@@ -448,12 +425,14 @@ void SPI2_IRQHandler(void)
 
 			default: { //Not an implemented/known command
 				R1_status |= R1_ILLEGAL_CMD_MSK; //Set the illegal command bit in R1.
-				/*LL_SPI_TransmitData8(SD_EMUL_SPI, command_num); //DEBUG
+
+				/*LL_SPI_TransmitData8(SD_EMUL_SPI, command_num); //DEBUG, bounce back what the emulator thinks it received.
 				LL_SPI_TransmitData8(SD_EMUL_SPI, (command_arg >> 24)); //Send word big-endian, so that the order the bytes appear in on the bus (and in the simplified spec document)
 				LL_SPI_TransmitData8(SD_EMUL_SPI, (command_arg >> 16)); //are the same as the way they are organized in memory.
 				LL_SPI_TransmitData8(SD_EMUL_SPI, (command_arg >> 8));  //(TransmitData32 is little-endian by necessity).
 				LL_SPI_TransmitData8(SD_EMUL_SPI, (command_arg >> 0));
 				LL_SPI_TransmitData16(SD_EMUL_SPI, command_CRC);*/
+
 				LL_SPI_TransmitData8(SD_EMUL_SPI, R1_status); //Send R1 response.
 				LL_SPI_ClearFlag_UDR(SD_EMUL_SPI); //Clear UDR flag to send response.
 				R1_status = (R1_status & R1_IDLE_STATE_MSK); //Clear all error flags when the host reads them.
@@ -461,7 +440,7 @@ void SPI2_IRQHandler(void)
 			} //end of switch(command_num)
 
 			//Get ready to receive another command:
-			if(state == receiving_cmd_arg) { //If state hasn't been set to something else, then go back to awaiting_cmd
+			if(state == receiving_cmd) { //If state hasn't been set to something else, then go back to awaiting_cmd
 				state = awaiting_cmd; //State is once more awaiting_cmd
 			}
 			break;
@@ -478,10 +457,6 @@ void SPI2_IRQHandler(void)
 			block_index = 0;
 
 			LL_SPI_TransmitData8(SD_EMUL_SPI, SD_BLOCK_START_TOKEN); //Start by sending the block start token.
-
-			LL_SPI_TransmitData8(SD_EMUL_SPI, data_block[block_index++]); //Transmit data from the block, and post-increment block index.
-			LL_SPI_TransmitData8(SD_EMUL_SPI, data_block[block_index++]);
-			LL_SPI_TransmitData8(SD_EMUL_SPI, data_block[block_index++]);
 			LL_SPI_ClearFlag_UDR(SD_EMUL_SPI);
 			//No break, we continue to transmitting_single_block.
 		}
@@ -490,30 +465,26 @@ void SPI2_IRQHandler(void)
 			//Don't do anything with received data, it's only 0xFF anyways. TODO: sleep + make DMA automatically put received bytes in a trash register or something
 			while(SD_EMUL_SPI->SR & SPI_SR_TXP) //While the TXP flag in the SPI status register is set (There is space for another packet in the TX FIFO):
 			{
-				LL_SPI_TransmitData8(SD_EMUL_SPI, data_block[block_index++]); //Transmit four bytes of data.
-				LL_SPI_TransmitData8(SD_EMUL_SPI, data_block[block_index++]);
-				LL_SPI_TransmitData8(SD_EMUL_SPI, data_block[block_index++]);
-				LL_SPI_TransmitData8(SD_EMUL_SPI, data_block[block_index++]);
-				if(block_index >= (SD_BLOCK_LENGTH - 4)) //If there are less than four bytes left in the data block:
+				LL_SPI_TransmitData8(SD_EMUL_SPI, data_block[block_index++]); //Transmit one byte of data.
+
+				if(block_index >= (SD_BLOCK_LENGTH)) //If the entire block has been transmitted:
 				{
 					while(!(SD_EMUL_SPI->SR & SPI_SR_TXP)) {;} //Wait until there is space in the TX FIFO (do nothing while the TXP flag isn't set)
 
-					while(block_index < SD_BLOCK_LENGTH) //Send last data bytes
-					{
-						LL_SPI_TransmitData8(SD_EMUL_SPI, data_block[block_index++]);
-					}
+					LL_SPI_TransmitData8(SD_EMUL_SPI, 0x00); //Send two dummy bytes as "CRC" (potential TODO: actual CRC).
 
-					while(!(SD_EMUL_SPI->SR & SPI_SR_TXP)) {;} //Wait until there is space in the TX FIFO (do nothing while the TXP flag isn't set)
+					while(!(SD_EMUL_SPI->SR & SPI_SR_TXP)) {;} //Wait until there is space for another byte
 
-					LL_SPI_TransmitData16(SD_EMUL_SPI, 0x0000); //Send two dummy bytes as "CRC" (potential TODO: actual CRC).
+					LL_SPI_TransmitData8(SD_EMUL_SPI, 0x00);
 
 					state = awaiting_cmd; //Data transfer finished.
-					break;
+					break; //break out of TXP while-loop
 				}
 			}
 
 			break;
 		}
+
 		default: {
 			//Should probably throw an error here if the state isn't a known state
 			LL_SPI_TransmitData32(SD_EMUL_SPI, 0x0BBB3E12); //will print 123EBB0B on SPI bus
@@ -522,9 +493,9 @@ void SPI2_IRQHandler(void)
 		}
 		} //end of switch(state)
 	}
-	if(LL_SPI_IsActiveFlag_OVR(SD_EMUL_SPI))
+	if(LL_SPI_IsActiveFlag_OVR(SD_EMUL_SPI)) //Ideally this shouldn't happen.
 	{
-		HAL_GPIO_TogglePin(USER_LED1_GPIO_Port, USER_LED1_Pin); //Ideally this shouldn't happen.
+		HAL_GPIO_TogglePin(USER_LED1_GPIO_Port, USER_LED1_Pin); //Toggle red LED to indicate this happened.
 		LL_SPI_ClearFlag_OVR(SD_EMUL_SPI);
 	}
 
