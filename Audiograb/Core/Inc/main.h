@@ -75,6 +75,8 @@ void Error_Handler(void);
 #define V_IN_MEAS_GPIO_Port GPIOC
 #define V_IMON_Pin GPIO_PIN_5
 #define V_IMON_GPIO_Port GPIOC
+#define SPI1_NSS_Pin GPIO_PIN_7
+#define SPI1_NSS_GPIO_Port GPIOE
 #define RPI_CM_ENABLE_Pin GPIO_PIN_9
 #define RPI_CM_ENABLE_GPIO_Port GPIOE
 #define RPI_GLOBAL_EN_Pin GPIO_PIN_11
