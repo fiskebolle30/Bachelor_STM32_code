@@ -444,7 +444,7 @@ void SPI2_IRQHandler(void)
 				state = awaiting_cmd; //State is once more awaiting_cmd
 			}
 			break;
-		}
+		}//end of receiving_command case
 
 		case waiting_for_SD_read_DMA: {
 			if(!SD_card_DMA_read_completed)
